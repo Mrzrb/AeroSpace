@@ -123,9 +123,9 @@ public struct Message: Hashable, Equatable {
     }
 }
 
-#Preview {
-    MessageView(model: MessageModel.shared)
-        .onAppear {
-            MessageModel.shared.message = Message(type: .config, description: "Description", body: "Body")
-        }
-}
+// #Preview {
+//     MessageView(model: MessageModel.shared)
+//         .onAppear {
+//             MessageModel.shared.message = Message(type: .config, description: "Description", body: "Body")
+//         }
+// }

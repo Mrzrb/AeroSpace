@@ -114,6 +114,8 @@ private let configParser: [String: any ParserProtocol<Config>] = [
     "workspace-to-monitor-force-assignment": Parser(\.workspaceToMonitorForceAssignment, parseWorkspaceToMonitorAssignment),
     "on-window-detected": Parser(\.onWindowDetected, parseOnWindowDetectedArray),
 
+    "bsp": Parser(\.bsp, parseBSPConfig),
+
     // Deprecated
     "non-empty-workspaces-root-containers-layout-on-startup": Parser(\._nonEmptyWorkspacesRootContainersLayoutOnStartup, parseStartupRootContainerLayout),
     "indent-for-nested-containers-with-the-same-orientation": Parser(\._indentForNestedContainersWithTheSameOrientation, parseIndentForNestedContainersWithTheSameOrientation),
@@ -388,4 +390,42 @@ func expectedActualTypeError(expected: TOMLType, actual: TOMLType, _ backtrace: 
 
 func expectedActualTypeError(expected: [TOMLType], actual: TOMLType, _ backtrace: TomlBacktrace) -> TomlParseError {
     .semantic(backtrace, expectedActualTypeError(expected: expected, actual: actual))
+}
+
+private let bspConfigParser: [String: any ParserProtocol<BSPConfig>] = [
+    "split-ratio": Parser(\.splitRatio, parseDouble),
+    "auto-split-threshold": Parser(\.autoSplitThreshold, parseDouble),
+    "preferred-split-direction": Parser(\.preferredSplitDirection, parseOptionalOrientation),
+]
+
+private func parseBSPConfig(_ raw: TOMLValueConvertible, _ backtrace: TomlBacktrace, _ errors: inout [TomlParseError]) -> BSPConfig {
+    parseTable(raw, BSPConfig(), bspConfigParser, backtrace, &errors)
+}
+
+private func parseDouble(_ raw: TOMLValueConvertible, _ backtrace: TomlBacktrace) -> ParsedToml<Double> {
+    if let doubleValue = raw.double {
+        return .success(doubleValue)
+    } else if let intValue = raw.int {
+        return .success(Double(intValue))
+    } else {
+        return .failure(expectedActualTypeError(expected: [.double, .int], actual: raw.type, backtrace))
+    }
+}
+
+private func parseOptionalOrientation(_ raw: TOMLValueConvertible, _ backtrace: TomlBacktrace) -> ParsedToml<Orientation?> {
+    if raw.string == nil {
+        return .success(nil)
+    }
+    return parseString(raw, backtrace).flatMap { str in
+        switch str.lowercased() {
+        case "horizontal", "h":
+            return .success(.h)
+        case "vertical", "v":
+            return .success(.v)
+        case "auto", "":
+            return .success(nil)
+        default:
+            return .failure(.semantic(backtrace, "Invalid orientation '\(str)'. Expected 'horizontal', 'vertical', or 'auto'"))
+        }
+    }
 }

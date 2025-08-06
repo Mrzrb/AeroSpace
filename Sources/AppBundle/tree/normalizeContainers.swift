@@ -9,6 +9,13 @@ extension Workspace {
 
 extension TilingContainer {
     @MainActor fileprivate func unbindEmptyAndAutoFlatten() {
+        // Apply BSP-specific optimizations first
+        if layout == .bsp {
+            optimizeBSPTreeStructure()
+            // BSP optimization may have changed the tree structure, so we need to check if we still exist
+            guard parent != nil else { return }
+        }
+        
         if let child = children.singleOrNil(), config.enableNormalizationFlattenContainers && (child is TilingContainer || !isRootContainer) {
             child.unbindFromParent()
             let mru = parent?.mostRecentChild

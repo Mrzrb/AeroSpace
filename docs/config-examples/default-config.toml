@@ -17,7 +17,7 @@ enable-normalization-opposite-orientation-for-nested-containers = true
 # You can set 0 to disable the padding feature
 accordion-padding = 30
 
-# Possible values: tiles|accordion
+# Possible values: tiles|accordion|bsp
 default-root-container-layout = 'tiles'
 
 # Possible values: horizontal|vertical|auto
@@ -58,6 +58,26 @@ automatically-unhide-macos-hidden-apps = false
     outer.top =        0
     outer.right =      0
 
+# BSP (Binary Space Partitioning) layout configuration
+# BSP layout divides the screen space recursively into smaller regions
+# See: https://nikitabobko.github.io/AeroSpace/guide#bsp-layout
+[bsp]
+    # Default split ratio when creating new splits (0.0 to 1.0)
+    # 0.5 means equal split, 0.3 means 30% for new window, 70% for existing
+    split-ratio = 0.5
+    
+    # Threshold for automatic split direction selection based on container aspect ratio
+    # If width/height > auto-split-threshold, prefer vertical splits
+    # If height/width > auto-split-threshold, prefer horizontal splits
+    auto-split-threshold = 1.2
+    
+    # Preferred split direction for new windows
+    # Possible values: 'auto', 'horizontal', 'vertical'
+    # 'auto' uses the auto-split-threshold to decide
+    # 'horizontal' always splits horizontally (new window below)
+    # 'vertical' always splits vertically (new window to the right)
+    preferred-split-direction = 'auto'
+
 # 'main' binding mode declaration
 # See: https://nikitabobko.github.io/AeroSpace/guide#binding-modes
 # 'main' binding mode must be always presented
@@ -94,6 +114,7 @@ automatically-unhide-macos-hidden-apps = false
     # See: https://nikitabobko.github.io/AeroSpace/commands#layout
     alt-slash = 'layout tiles horizontal vertical'
     alt-comma = 'layout accordion horizontal vertical'
+    alt-period = 'layout bsp'
 
     # See: https://nikitabobko.github.io/AeroSpace/commands#focus
     alt-h = 'focus left'

@@ -22,10 +22,16 @@ struct LayoutCommand: Command {
                 return changeTilingLayout(io, targetLayout: .tiles, targetOrientation: .h, window: window)
             case .v_tiles:
                 return changeTilingLayout(io, targetLayout: .tiles, targetOrientation: .v, window: window)
+            case .h_bsp:
+                return changeTilingLayout(io, targetLayout: .bsp, targetOrientation: .h, window: window)
+            case .v_bsp:
+                return changeTilingLayout(io, targetLayout: .bsp, targetOrientation: .v, window: window)
             case .accordion:
                 return changeTilingLayout(io, targetLayout: .accordion, targetOrientation: nil, window: window)
             case .tiles:
                 return changeTilingLayout(io, targetLayout: .tiles, targetOrientation: nil, window: window)
+            case .bsp:
+                return changeTilingLayout(io, targetLayout: .bsp, targetOrientation: nil, window: window)
             case .horizontal:
                 return changeTilingLayout(io, targetLayout: nil, targetOrientation: .h, window: window)
             case .vertical:
@@ -59,9 +65,24 @@ struct LayoutCommand: Command {
         case .tilingContainer(let parent):
             let targetOrientation = targetOrientation ?? parent.orientation
             let targetLayout = targetLayout ?? parent.layout
-            parent.layout = targetLayout
-            parent.changeOrientation(targetOrientation)
-            return true
+            
+            // Use safe transition for BSP layouts
+            if targetLayout == .bsp {
+                do {
+                    try parent.safeTransitionToBSP(targetLayout)
+                    parent.changeOrientation(targetOrientation)
+                    return true
+                } catch let error as TilingContainer.BSPError {
+                    return io.err("BSP layout transition failed: \(error.localizedDescription)")
+                } catch {
+                    return io.err("Unexpected error during BSP layout transition: \(error.localizedDescription)")
+                }
+            } else {
+                // For non-BSP layouts, use the original logic
+                parent.layout = targetLayout
+                parent.changeOrientation(targetOrientation)
+                return true
+            }
         case .workspace, .macosMinimizedWindowsContainer, .macosFullscreenWindowsContainer,
              .macosPopupWindowsContainer, .macosHiddenAppsWindowsContainer:
             return io.err("The window is non-tiling")
@@ -73,12 +94,15 @@ extension Window {
         return switch layout {
             case .accordion:   (parent as? TilingContainer)?.layout == .accordion
             case .tiles:       (parent as? TilingContainer)?.layout == .tiles
+            case .bsp:         (parent as? TilingContainer)?.layout == .bsp
             case .horizontal:  (parent as? TilingContainer)?.orientation == .h
             case .vertical:    (parent as? TilingContainer)?.orientation == .v
             case .h_accordion: (parent as? TilingContainer).map { $0.layout == .accordion && $0.orientation == .h } == true
             case .v_accordion: (parent as? TilingContainer).map { $0.layout == .accordion && $0.orientation == .v } == true
             case .h_tiles:     (parent as? TilingContainer).map { $0.layout == .tiles && $0.orientation == .h } == true
             case .v_tiles:     (parent as? TilingContainer).map { $0.layout == .tiles && $0.orientation == .v } == true
+            case .h_bsp:       (parent as? TilingContainer).map { $0.layout == .bsp && $0.orientation == .h } == true
+            case .v_bsp:       (parent as? TilingContainer).map { $0.layout == .bsp && $0.orientation == .v } == true
             case .tiling:      parent is TilingContainer
             case .floating:    parent is Workspace
         }

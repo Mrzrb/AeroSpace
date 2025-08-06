@@ -10,6 +10,12 @@ enable-normalization-opposite-orientation-for-nested-containers = false
 # Mouse follows focus when focused monitor changes
 on-focused-monitor-changed = ['move-mouse monitor-lazy-center']
 
+# BSP layout configuration for i3-like behavior
+[bsp]
+    split-ratio = 0.5
+    auto-split-threshold = 1.2
+    preferred-split-direction = 'auto'
+
 [mode.main.binding]
     # See: https://nikitabobko.github.io/AeroSpace/goodies#open-a-new-window-with-applescript
     alt-enter = '''exec-and-forget osascript -e '
@@ -40,6 +46,7 @@ on-focused-monitor-changed = ['move-mouse monitor-lazy-center']
     alt-s = 'layout v_accordion' # 'layout stacking' in i3
     alt-w = 'layout h_accordion' # 'layout tabbed' in i3
     alt-e = 'layout tiles horizontal vertical' # 'layout toggle split' in i3
+    alt-b = 'layout bsp' # BSP layout similar to i3's default behavior
 
     alt-shift-space = 'layout floating tiling' # 'floating toggle' in i3
 

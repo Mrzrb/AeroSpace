@@ -9,7 +9,10 @@ struct ResizeCommand: Command { // todo cover with tests
         guard let target = args.resolveTargetOrReportError(env, io) else { return false }
 
         let candidates = target.windowOrNil?.parentsWithSelf
-            .filter { ($0.parent as? TilingContainer)?.layout == .tiles }
+            .filter { 
+                let layout = ($0.parent as? TilingContainer)?.layout
+                return layout == .tiles || layout == .bsp
+            }
             ?? []
 
         let orientation: Orientation?
@@ -36,6 +39,8 @@ struct ResizeCommand: Command { // todo cover with tests
         guard let parent else { return io.err("resize command doesn't support floating windows yet https://github.com/nikitabobko/AeroSpace/issues/9") }
         guard let orientation else { return false }
         guard let node else { return false }
+        // Use the same logic for both BSP and tiles layouts
+        // The key insight: let BSP use the same weight system as tiles
         let diff: CGFloat = switch args.units.val {
             case .set(let unit): CGFloat(unit) - node.getWeight(orientation)
             case .add(let unit): CGFloat(unit)

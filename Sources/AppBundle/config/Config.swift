@@ -57,8 +57,15 @@ struct Config: ConvenienceCopyable {
     var onWindowDetected: [WindowDetectedCallback] = []
 
     var preservedWorkspaceNames: [String] = []
+    var bsp: BSPConfig = BSPConfig()
 }
 
 enum DefaultContainerOrientation: String {
     case horizontal, vertical, auto
+}
+
+struct BSPConfig: ConvenienceCopyable {
+    var splitRatio: Double = 0.5
+    var autoSplitThreshold: Double = 1.2
+    var preferredSplitDirection: Orientation? = nil
 }
