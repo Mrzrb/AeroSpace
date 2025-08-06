@@ -65,7 +65,7 @@ struct LayoutCommand: Command {
         case .tilingContainer(let parent):
             let targetOrientation = targetOrientation ?? parent.orientation
             let targetLayout = targetLayout ?? parent.layout
-            
+
             // Use safe transition for BSP layouts
             if targetLayout == .bsp {
                 do {

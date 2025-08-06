@@ -171,32 +171,32 @@ extension TilingContainer {
     fileprivate func layoutBSP(_ point: CGPoint, width: CGFloat, height: CGFloat, virtual: Rect, _ context: LayoutContext) async throws {
         // BSP layout divides space recursively based on the container's orientation
         // Each child gets space proportional to its weight
-        
+
         guard !children.isEmpty else { return }
-        
+
         // For single child, give it all the space
         if children.count == 1 {
             try await children[0].layoutRecursive(point, width: width, height: height, virtual: virtual, context)
             return
         }
-        
+
         // Calculate total weight for normalization
         let totalWeight = children.sumOfDouble { $0.getWeight(orientation) }
         guard totalWeight > 0 else { return }
-        
+
         var currentPoint = point
         var currentVirtualPoint = virtual.topLeftCorner
         let gaps = context.resolvedGaps.inner.get(orientation).toDouble()
-        
+
         // Layout each child based on its proportional weight
         for (index, child) in children.enumerated() {
             let childWeight = child.getWeight(orientation)
             let proportion = childWeight / totalWeight
-            
+
             // Calculate child dimensions based on orientation
             let (childWidth, childHeight): (CGFloat, CGFloat)
             let (childVirtualWidth, childVirtualHeight): (CGFloat, CGFloat)
-            
+
             switch orientation {
                 case .h:
                     // Horizontal split: children are arranged side by side
@@ -211,31 +211,31 @@ extension TilingContainer {
                     childVirtualWidth = virtual.width
                     childVirtualHeight = virtual.height * proportion
             }
-            
+
             // Apply gaps (except for the last child)
             let isLastChild = index == children.count - 1
             let gapAdjustment = isLastChild ? 0 : gaps / 2
-            
+
             let adjustedChildWidth = orientation == .h ? max(0, childWidth - gapAdjustment) : childWidth
             let adjustedChildHeight = orientation == .v ? max(0, childHeight - gapAdjustment) : childHeight
-            
+
             // Create virtual rect for this child
             let childVirtualRect = Rect(
                 topLeftX: currentVirtualPoint.x,
                 topLeftY: currentVirtualPoint.y,
                 width: childVirtualWidth,
-                height: childVirtualHeight
+                height: childVirtualHeight,
             )
-            
+
             // Layout the child recursively
             try await child.layoutRecursive(
                 currentPoint,
                 width: adjustedChildWidth,
                 height: adjustedChildHeight,
                 virtual: childVirtualRect,
-                context
+                context,
             )
-            
+
             // Move to next position
             switch orientation {
                 case .h:

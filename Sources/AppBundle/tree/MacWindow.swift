@@ -237,12 +237,12 @@ private func unbindAndGetBindingDataForNewWindow(_ windowId: UInt32, _ macApp: M
 @MainActor
 private func unbindAndGetBindingDataForNewTilingWindow(_ workspace: Workspace, window: Window?) -> BindingData {
     window?.unbindFromParent() // It's important to unbind to get correct data from below
-    
+
     // Check if we should use BSP insertion logic
     if workspace.rootTilingContainer.layout == .bsp {
         return TilingContainer.getBSPInsertionPoint(in: workspace, for: window)
     }
-    
+
     // Default insertion logic for tiles and accordion layouts
     let mruWindow = workspace.mostRecentWindowRecursive
     if let mruWindow, let tilingParent = mruWindow.parent as? TilingContainer {
