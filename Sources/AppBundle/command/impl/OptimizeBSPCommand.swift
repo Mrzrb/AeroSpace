@@ -9,15 +9,12 @@ struct OptimizeBSPCommand: Command {
         let workspace: Workspace
         
         if let workspaceName = args.workspaceName {
-            guard let targetWorkspace = Workspace.get(byName: workspaceName) else {
-                return io.err("Workspace '\(workspaceName.raw)' not found")
-            }
-            workspace = targetWorkspace
+            workspace = Workspace.get(byName: workspaceName.raw)
         } else if let windowId = args.windowId {
-            guard let window = MacWindow.get(byId: windowId) else {
+            guard let window = Window.get(byId: windowId) else {
                 return io.err("Window with ID \(windowId) not found")
             }
-            guard let windowWorkspace = window.workspace else {
+            guard let windowWorkspace = window.nodeWorkspace else {
                 return io.err("Window is not in any workspace")
             }
             workspace = windowWorkspace

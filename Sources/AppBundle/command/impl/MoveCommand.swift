@@ -187,7 +187,7 @@ extension TilingTreeNodeCases {
 /// Optimizes BSP layout after a window move operation
 @MainActor private func optimizeBSPAfterWindowMove(window: Window) {
     // Find the workspace containing the window
-    guard let workspace = window.workspace else { return }
+    guard let workspace = window.nodeWorkspace else { return }
     
     // Get the root container
     let rootContainer = workspace.rootTilingContainer

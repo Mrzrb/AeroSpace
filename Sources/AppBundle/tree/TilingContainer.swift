@@ -221,13 +221,13 @@ extension TilingContainer {
     /// This method dynamically adjusts window proportions based on current layout
     @MainActor
     func intelligentBSPRebalance() {
-        guard layout == .bsp && !children.isEmpty && config.bsp.enableIntelligentRebalancing else { return }
+        guard layout == .bsp && !children.isEmpty else { return }
 
         // Get current container dimensions for smart rebalancing
         let containerRect = lastAppliedLayoutVirtualRect ?? Rect(topLeftX: 0, topLeftY: 0, width: 1920, height: 1080)
         
         // Apply different rebalancing strategies based on container characteristics
-        if config.bsp.enableAdaptiveWeighting && shouldUseAdaptiveRebalancing(containerRect: containerRect) {
+        if shouldUseAdaptiveRebalancing(containerRect: containerRect) {
             applyAdaptiveRebalancing(containerRect: containerRect)
         } else {
             applyStandardRebalancing()
@@ -346,7 +346,7 @@ extension TilingContainer {
     /// This method should be called when the root container structure changes
     @MainActor
     func handleRootContainerChange() {
-        guard layout == .bsp && config.bsp.enableAutoOptimization else { return }
+        guard layout == .bsp else { return }
         
         // Step 1: Validate and fix any structural issues
         if !validateBSPTreeStructure() {
