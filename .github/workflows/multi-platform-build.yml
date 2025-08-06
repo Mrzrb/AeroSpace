@@ -72,10 +72,23 @@ jobs:
       
       - name: Install dependencies
         run: |
+          # 确保使用正确的Xcode版本
+          if [ "${{ matrix.xcode }}" = "16.1" ]; then
+            sudo xcode-select -s /Applications/Xcode_16.1.app/Contents/Developer || \
+            sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+          elif [ "${{ matrix.xcode }}" = "16.0" ]; then
+            sudo xcode-select -s /Applications/Xcode_16.0.app/Contents/Developer || \
+            sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+          fi
+          
           brew update
-          brew install bash fish xcbeautify swiftly
-          swiftly init --skip-install --assume-yes --verbose
-          swiftly install
+          brew install bash fish xcbeautify
+          
+          # 验证Swift版本
+          echo "=== Swift Version Check ==="
+          swift --version
+          xcodebuild -version
+          
           ./script/install-dep.sh --all
       
       - name: Determine version

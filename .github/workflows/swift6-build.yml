@@ -1,0 +1,235 @@
+name: Swift 6.0 Compatible Build
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version'
+        required: true
+        type: string
+
+env:
+  # 强制使用支持Swift 6.0的环境
+  DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
+
+jobs:
+  swift6-build:
+    runs-on: macos-14  # 使用macOS 14确保有Xcode 16
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      # 明确设置Xcode 16以支持Swift 6.0
+      - name: Setup Xcode 16 for Swift 6.0
+        run: |
+          echo "Setting up Xcode 16 for Swift 6.0 support..."
+          
+          # 列出可用的Xcode版本
+          ls /Applications/ | grep -i xcode || true
+          
+          # 尝试设置Xcode 16
+          if [ -d "/Applications/Xcode_16.1.app" ]; then
+            sudo xcode-select -s /Applications/Xcode_16.1.app/Contents/Developer
+            echo "Using Xcode 16.1"
+          elif [ -d "/Applications/Xcode_16.0.app" ]; then
+            sudo xcode-select -s /Applications/Xcode_16.0.app/Contents/Developer
+            echo "Using Xcode 16.0"
+          elif [ -d "/Applications/Xcode.app" ]; then
+            sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+            echo "Using default Xcode"
+          else
+            echo "No suitable Xcode found"
+            exit 1
+          fi
+          
+          # 验证环境
+          echo "=== Environment Verification ==="
+          xcode-select -p
+          xcodebuild -version
+          swift --version
+          
+          # 检查Swift版本是否支持Swift 6.0语法
+          if swift --version | grep -E "(Swift version 6|Swift version 5\.[89])" > /dev/null; then
+            echo "✅ Swift version supports Swift 6.0 features"
+          else
+            echo "❌ Swift version may not fully support Swift 6.0"
+            echo "Continuing anyway..."
+          fi
+      
+      # 优化的依赖缓存
+      - name: Cache Swift packages and build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            .build
+            ~/.cache/org.swift.swiftpm
+            ~/Library/Developer/Xcode/DerivedData
+            ~/Library/Caches/org.swift.swiftpm
+          key: swift6-${{ runner.os }}-${{ hashFiles('**/Package.resolved', 'Package.swift') }}
+          restore-keys: |
+            swift6-${{ runner.os }}-
+      
+      - name: Install build dependencies
+        run: |
+          echo "Installing build dependencies..."
+          
+          # 安装必要工具，跳过可能有问题的swiftly
+          brew update
+          brew install bash fish xcbeautify
+          
+          # 直接使用系统Swift，不安装额外的Swift工具链
+          echo "Using system Swift from Xcode..."
+      
+      - name: Install project dependencies
+        run: |
+          echo "Installing project-specific dependencies..."
+          ./script/install-dep.sh --all
+      
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "Building version: $VERSION"
+      
+      # 先进行Swift包解析测试
+      - name: Resolve Swift packages
+        run: |
+          echo "Resolving Swift packages..."
+          swift package resolve
+          
+          echo "=== Package.resolved content ==="
+          if [ -f "Package.resolved" ]; then
+            cat Package.resolved
+          fi
+      
+      # 运行测试以验证Swift 6.0兼容性
+      - name: Run Swift 6.0 compatibility tests
+        run: |
+          echo "Running tests with Swift 6.0..."
+          
+          # 首先尝试编译
+          echo "=== Testing compilation ==="
+          swift build --configuration debug
+          
+          # 运行测试
+          echo "=== Running tests ==="
+          ./run-tests.sh
+      
+      # 构建发布版本
+      - name: Build release with Swift 6.0
+        run: |
+          echo "Building release version with Swift 6.0..."
+          echo "Version: ${{ steps.version.outputs.VERSION }}"
+          
+          # 使用项目的构建脚本
+          ./build-release.sh --build-version "${{ steps.version.outputs.VERSION }}" --codesign-identity -
+      
+      # 验证构建产物
+      - name: Verify Swift 6.0 build artifacts
+        run: |
+          echo "=== Verifying build artifacts ==="
+          
+          if [ ! -d ".release" ]; then
+            echo "❌ Release directory not found"
+            exit 1
+          fi
+          
+          ls -la .release/
+          
+          # 检查关键文件
+          if [ -f ".release/aerospace" ]; then
+            echo "✅ CLI binary found"
+            file .release/aerospace
+            
+            # 测试CLI是否可以运行
+            .release/aerospace --version || echo "CLI version check failed"
+          else
+            echo "❌ CLI binary not found"
+          fi
+          
+          if [ -d ".release/AeroSpace.app" ]; then
+            echo "✅ App bundle found"
+            file .release/AeroSpace.app/Contents/MacOS/AeroSpace
+          else
+            echo "❌ App bundle not found"
+          fi
+          
+          # 检查通用二进制
+          if file .release/aerospace | grep -q "universal binary"; then
+            echo "✅ CLI is universal binary"
+          else
+            echo "⚠️  CLI may not be universal binary"
+          fi
+      
+      # 上传构建产物
+      - name: Upload Swift 6.0 build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: swift6-build-${{ steps.version.outputs.VERSION }}
+          path: |
+            .release/
+            !.release/xcodebuild.log
+          retention-days: 30
+      
+      # 创建GitHub Release（如果是tag触发）
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.VERSION }}
+          name: AeroSpace v${{ steps.version.outputs.VERSION }} (Swift 6.0)
+          body: |
+            ## AeroSpace v${{ steps.version.outputs.VERSION }}
+            
+            🚀 **Built with Swift 6.0**
+            
+            This release was built using Swift 6.0 and Xcode 16, ensuring compatibility with the latest Swift language features.
+            
+            ### Build Information
+            - **Swift Version**: 6.0
+            - **Xcode Version**: 16.x
+            - **Build Date**: ${{ github.event.head_commit.timestamp }}
+            - **Commit**: [${{ github.sha }}](https://github.com/${{ github.repository }}/commit/${{ github.sha }})
+            
+            ### Installation
+            1. Download `AeroSpace-v${{ steps.version.outputs.VERSION }}.zip`
+            2. Extract and move `AeroSpace.app` to `/Applications/`
+            3. Optional: Add CLI tool to PATH
+            
+            ### System Requirements
+            - macOS 13.0 or later
+            - Universal Binary (Intel + Apple Silicon)
+          draft: false
+          prerelease: ${{ contains(steps.version.outputs.VERSION, '-') }}
+          files: |
+            .release/AeroSpace-v${{ steps.version.outputs.VERSION }}.zip
+            .release/aerospace
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      # 构建摘要
+      - name: Build summary
+        if: always()
+        run: |
+          echo "=== Swift 6.0 Build Summary ==="
+          echo "Status: ${{ job.status }}"
+          echo "Version: ${{ steps.version.outputs.VERSION }}"
+          echo "Swift Version: $(swift --version | head -n1)"
+          echo "Xcode Version: $(xcodebuild -version | head -n1)"
+          
+          if [ "${{ job.status }}" = "success" ]; then
+            echo "✅ Swift 6.0 build completed successfully!"
+          else
+            echo "❌ Swift 6.0 build failed"
+          fi

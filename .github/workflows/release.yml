@@ -1,4 +1,4 @@
-name: Cloud Build and Release
+name: Build and Release
 
 on:
   push:
@@ -11,84 +11,38 @@ on:
         required: true
         type: string
 
-env:
-  DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
-
 jobs:
   build-and-release:
-    runs-on: macos-latest
+    runs-on: macos-15  # 使用 macos-15 确保有最新的 Xcode
     
     steps:
+      - name: Debug environment
+        run: env
+        
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
         with:
           fetch-depth: 0
       
-      # 设置支持Swift 6.0的Xcode版本
+      # 设置 Xcode 版本（参考成功的 build.yml）
       - name: Setup Xcode
-        uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: '16.1'  # Xcode 16.1支持Swift 6.0
-      
-      # 缓存Swift Package Manager依赖
-      - name: Cache Swift packages
-        uses: actions/cache@v4
-        with:
-          path: |
-            .build
-            ~/.cache/org.swift.swiftpm
-            ~/Library/Developer/Xcode/DerivedData
-          key: ${{ runner.os }}-swift-${{ hashFiles('**/Package.resolved', 'Package.swift') }}
-          restore-keys: |
-            ${{ runner.os }}-swift-
-      
-      # 缓存Homebrew依赖
-      - name: Cache Homebrew
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/Library/Caches/Homebrew
-            /opt/homebrew/var/homebrew/locks
-          key: ${{ runner.os }}-brew-${{ hashFiles('.github/workflows/release.yml') }}
-          restore-keys: |
-            ${{ runner.os }}-brew-
-      
-      # 安装构建工具并配置Swift 6.0环境
-      - name: Install build tools
         run: |
-          echo "Installing build dependencies for Swift 6.0..."
-          
-          # 确保使用正确的Xcode版本
-          sudo xcode-select -s /Applications/Xcode_16.1.app/Contents/Developer || \
-          sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
-          
-          # 更新Homebrew并安装工具
-          brew update
-          brew install bash fish xcbeautify
-          
-          # 不使用swiftly，直接使用Xcode自带的Swift 6.0
-          echo "=== Environment Info ==="
-          sw_vers
-          xcode-select -p
-          swift --version
-          xcodebuild -version
-          
-          # 验证Swift版本支持
-          if swift --version | grep -q "Swift version 6"; then
-            echo "✅ Swift 6.0 detected"
-          elif swift --version | grep -q "Swift version 5"; then
-            echo "⚠️  Swift 5.x detected, but project requires Swift 6.0"
-            echo "Attempting to use Xcode 16..."
+          sw_vers -productVersion
+          if sw_vers -productVersion | grep -q "^13"; then # macOS 13
+            true # Xcode 16 is not supported on macOS 13 :(
           else
-            echo "❌ Unsupported Swift version"
-            exit 1
+            sudo xcode-select -s "$XCODE_16_DEVELOPER_DIR" # Affects macOS SDK
           fi
       
-      # 安装项目特定依赖
-      - name: Install project dependencies
+      # 安装构建工具（参考成功的 build.yml）
+      - name: Install build tools
         run: |
-          echo "Installing project dependencies..."
-          ./script/install-dep.sh --all
+          brew update && brew install bash fish xcbeautify swiftly
+          swiftly init --skip-install --assume-yes --verbose && swiftly install
+      
+      # 安装项目依赖
+      - name: Install project dependencies
+        run: ./script/install-dep.sh --all
       
       # 确定版本号
       - name: Determine version
@@ -101,42 +55,25 @@ jobs:
           fi
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
           echo "Building version: $VERSION"
-          
-          # 设置构建环境变量
-          echo "BUILD_VERSION=$VERSION" >> $GITHUB_ENV
-          echo "BUILD_DATE=$(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_ENV
-          echo "BUILD_COMMIT=${{ github.sha }}" >> $GITHUB_ENV
       
-      # 运行测试（利用GitHub Actions的并行能力）
+      # 运行测试
       - name: Run tests
-        run: |
-          echo "Running tests in GitHub Actions environment..."
-          ./run-tests.sh
+        run: ./run-tests.sh
       
-      # 云端编译构建
+      # 构建发布版本（仅在 macos-15 上构建，参考成功的 build.yml）
       - name: Build release artifacts
         run: |
-          echo "Building release using GitHub Actions macOS runner..."
-          echo "Version: $BUILD_VERSION"
-          echo "Commit: $BUILD_COMMIT"
-          echo "Build Date: $BUILD_DATE"
-          
-          # 使用GitHub Actions提供的代码签名（本地签名）
-          ./build-release.sh --build-version "$BUILD_VERSION" --codesign-identity -
-      
-      # 构建失败时显示日志
-      - name: Show build logs on failure
-        if: failure()
-        run: |
-          echo "=== Build failed, showing logs ==="
-          if [ -f ./.release/xcodebuild.log ]; then
-            echo "=== Xcode Build Log ==="
-            cat ./.release/xcodebuild.log
+          sw_vers -productVersion
+          if sw_vers -productVersion | grep -q "^15"; then
+            # "-" means "Sign to run locally". There is no aerospace-codesign-certificate on GH Actions
+            ./build-release.sh --build-version "${{ steps.version.outputs.VERSION }}" --codesign-identity -
+            ./install-from-sources.sh --dont-rebuild
           fi
-          
-          echo "=== Environment Debug Info ==="
-          env | grep -E "(XCODE|DEVELOPER|SWIFT)" || true
-          ls -la .build/ || true
+      
+      # 构建失败时显示日志（参考成功的 build.yml）
+      - name: Show build logs on failure
+        if: ${{ always() }}
+        run: 'if test -f ./.release/xcodebuild.log; then cat ./.release/xcodebuild.log; fi'
       
       # 验证构建产物
       - name: Verify build artifacts
@@ -144,7 +81,7 @@ jobs:
           echo "=== Verifying build artifacts ==="
           
           # 检查文件存在
-          if [ ! -f ".release/AeroSpace-v$BUILD_VERSION.zip" ]; then
+          if [ ! -f ".release/AeroSpace-v${{ steps.version.outputs.VERSION }}.zip" ]; then
             echo "❌ Release ZIP not found"
             exit 1
           fi
@@ -198,15 +135,15 @@ jobs:
           
           # 创建发布说明
           cat > release_notes.md << EOF
-          ## AeroSpace v$BUILD_VERSION
+          ## AeroSpace v${{ steps.version.outputs.VERSION }}
           
-          🚀 **Built with GitHub Actions Cloud Infrastructure**
+          🚀 **Built with GitHub Actions**
           
           ### Build Information
-          - **Version**: $BUILD_VERSION
-          - **Commit**: [\`${BUILD_COMMIT:0:7}\`](https://github.com/${{ github.repository }}/commit/$BUILD_COMMIT)
-          - **Build Date**: $BUILD_DATE
-          - **Built on**: GitHub Actions (macOS-latest)
+          - **Version**: ${{ steps.version.outputs.VERSION }}
+          - **Commit**: [\`${{ github.sha }}\`](https://github.com/${{ github.repository }}/commit/${{ github.sha }})
+          - **Build Date**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+          - **Built on**: GitHub Actions (macOS-15)
           
           ### What's Included
           - **AeroSpace.app** - macOS application (Universal Binary)
@@ -214,7 +151,7 @@ jobs:
           - **Documentation** - Manual pages and shell completion
           
           ### Installation
-          1. Download \`AeroSpace-v$BUILD_VERSION.zip\`
+          1. Download \`AeroSpace-v${{ steps.version.outputs.VERSION }}.zip\`
           2. Extract the archive
           3. Move \`AeroSpace.app\` to \`/Applications/\`
           4. Optionally add \`bin/aerospace\` to your PATH
@@ -232,17 +169,17 @@ jobs:
           cat release_notes.md >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
       
-      # 使用GitHub Actions创建Release
+      # 创建GitHub Release
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ env.BUILD_VERSION }}
-          name: AeroSpace v${{ env.BUILD_VERSION }}
+          tag_name: v${{ steps.version.outputs.VERSION }}
+          name: AeroSpace v${{ steps.version.outputs.VERSION }}
           body: ${{ steps.release_notes.outputs.RELEASE_NOTES }}
           draft: false
-          prerelease: ${{ contains(env.BUILD_VERSION, '-') }}
+          prerelease: ${{ contains(steps.version.outputs.VERSION, '-') }}
           files: |
-            .release/AeroSpace-v${{ env.BUILD_VERSION }}.zip
+            .release/AeroSpace-v${{ steps.version.outputs.VERSION }}.zip
             .release/aerospace
           generate_release_notes: true
         env:
@@ -252,38 +189,9 @@ jobs:
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: AeroSpace-v${{ env.BUILD_VERSION }}-artifacts
+          name: AeroSpace-v${{ steps.version.outputs.VERSION }}-artifacts
           path: |
             .release/
             !.release/xcodebuild.log
           retention-days: 90
           compression-level: 6
-      
-      # 可选：上传到其他云存储
-      - name: Upload to cloud storage (optional)
-        if: success()
-        run: |
-          echo "Build completed successfully!"
-          echo "Release created: https://github.com/${{ github.repository }}/releases/tag/v$BUILD_VERSION"
-          echo "Artifacts uploaded to GitHub Artifacts for 90 days"
-          
-          # 这里可以添加上传到其他云存储的逻辑
-          # 例如：AWS S3, Google Cloud Storage, Azure Blob Storage 等
-        continue-on-error: true
-
-  # 可选：通知任务
-  notify:
-    needs: build-and-release
-    runs-on: ubuntu-latest
-    if: always()
-    
-    steps:
-      - name: Notify build result
-        run: |
-          if [ "${{ needs.build-and-release.result }}" = "success" ]; then
-            echo "✅ Release build completed successfully!"
-            echo "🎉 AeroSpace v${{ needs.build-and-release.outputs.version }} is now available"
-          else
-            echo "❌ Release build failed"
-            echo "Please check the build logs for details"
-          fi
