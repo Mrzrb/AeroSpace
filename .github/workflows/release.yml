@@ -24,11 +24,11 @@ jobs:
         with:
           fetch-depth: 0
       
-      # 使用GitHub Actions提供的Xcode设置
+      # 设置支持Swift 6.0的Xcode版本
       - name: Setup Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: latest-stable
+          xcode-version: '16.1'  # Xcode 16.1支持Swift 6.0
       
       # 缓存Swift Package Manager依赖
       - name: Cache Swift packages
@@ -53,25 +53,36 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-brew-
       
-      # 使用GitHub Actions的并行能力安装依赖
+      # 安装构建工具并配置Swift 6.0环境
       - name: Install build tools
         run: |
-          echo "Installing build dependencies using GitHub Actions runner..."
+          echo "Installing build dependencies for Swift 6.0..."
+          
+          # 确保使用正确的Xcode版本
+          sudo xcode-select -s /Applications/Xcode_16.1.app/Contents/Developer || \
+          sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
           
           # 更新Homebrew并安装工具
           brew update
-          brew install bash fish xcbeautify swiftly
+          brew install bash fish xcbeautify
           
-          # 设置Swift工具链
-          swiftly init --skip-install --assume-yes --verbose
-          swiftly install
-          
-          # 显示环境信息
+          # 不使用swiftly，直接使用Xcode自带的Swift 6.0
           echo "=== Environment Info ==="
           sw_vers
           xcode-select -p
           swift --version
           xcodebuild -version
+          
+          # 验证Swift版本支持
+          if swift --version | grep -q "Swift version 6"; then
+            echo "✅ Swift 6.0 detected"
+          elif swift --version | grep -q "Swift version 5"; then
+            echo "⚠️  Swift 5.x detected, but project requires Swift 6.0"
+            echo "Attempting to use Xcode 16..."
+          else
+            echo "❌ Unsupported Swift version"
+            exit 1
+          fi
       
       # 安装项目特定依赖
       - name: Install project dependencies

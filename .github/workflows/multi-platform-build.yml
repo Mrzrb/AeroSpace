@@ -28,15 +28,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-13
-            xcode: '15.2'
-            name: 'Intel Mac (macOS 13)'
           - os: macos-14
-            xcode: '15.4'
-            name: 'Apple Silicon (macOS 14)'
+            xcode: '16.0'
+            name: 'macOS 14 + Xcode 16.0'
           - os: macos-latest
-            xcode: 'latest-stable'
-            name: 'Latest macOS'
+            xcode: '16.1'
+            name: 'Latest macOS + Xcode 16.1'
     
     runs-on: ${{ matrix.os }}
     name: Build on ${{ matrix.name }}
