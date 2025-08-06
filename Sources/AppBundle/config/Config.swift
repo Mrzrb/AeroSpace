@@ -68,4 +68,7 @@ struct BSPConfig: ConvenienceCopyable {
     var splitRatio: Double = 0.5
     var autoSplitThreshold: Double = 1.2
     var preferredSplitDirection: Orientation? = nil
+    var enableIntelligentRebalancing: Bool = true
+    var enableAdaptiveWeighting: Bool = true
+    var enableAutoOptimization: Bool = true
 }

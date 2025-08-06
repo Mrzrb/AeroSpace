@@ -396,6 +396,9 @@ private let bspConfigParser: [String: any ParserProtocol<BSPConfig>] = [
     "split-ratio": Parser(\.splitRatio, parseDouble),
     "auto-split-threshold": Parser(\.autoSplitThreshold, parseDouble),
     "preferred-split-direction": Parser(\.preferredSplitDirection, parseOptionalOrientation),
+    "enable-intelligent-rebalancing": Parser(\.enableIntelligentRebalancing, parseBool),
+    "enable-adaptive-weighting": Parser(\.enableAdaptiveWeighting, parseBool),
+    "enable-auto-optimization": Parser(\.enableAutoOptimization, parseBool),
 ]
 
 private func parseBSPConfig(_ raw: TOMLValueConvertible, _ backtrace: TomlBacktrace, _ errors: inout [TomlParseError]) -> BSPConfig {
