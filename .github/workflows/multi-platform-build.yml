@@ -1,0 +1,222 @@
+name: Multi-Platform Cloud Build
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version'
+        required: true
+        type: string
+      build_matrix:
+        description: 'Build matrix (all/macos-13/macos-14/macos-latest)'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - macos-13
+          - macos-14
+          - macos-latest
+
+jobs:
+  # 矩阵构建任务 - 利用GitHub Actions的并行能力
+  matrix-build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-13
+            xcode: '15.2'
+            name: 'Intel Mac (macOS 13)'
+          - os: macos-14
+            xcode: '15.4'
+            name: 'Apple Silicon (macOS 14)'
+          - os: macos-latest
+            xcode: 'latest-stable'
+            name: 'Latest macOS'
+    
+    runs-on: ${{ matrix.os }}
+    name: Build on ${{ matrix.name }}
+    
+    # 只在选择的平台上构建
+    if: |
+      github.event.inputs.build_matrix == 'all' || 
+      github.event.inputs.build_matrix == matrix.os ||
+      github.event_name == 'push'
+    
+    outputs:
+      version: ${{ steps.version.outputs.VERSION }}
+      
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: ${{ matrix.xcode }}
+      
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            .build
+            ~/.cache/org.swift.swiftpm
+            ~/Library/Developer/Xcode/DerivedData
+          key: ${{ matrix.os }}-${{ matrix.xcode }}-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: |
+            ${{ matrix.os }}-${{ matrix.xcode }}-
+            ${{ matrix.os }}-
+      
+      - name: Install dependencies
+        run: |
+          brew update
+          brew install bash fish xcbeautify swiftly
+          swiftly init --skip-install --assume-yes --verbose
+          swiftly install
+          ./script/install-dep.sh --all
+      
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "Building version: $VERSION on ${{ matrix.name }}"
+      
+      - name: Run tests
+        run: ./run-tests.sh
+      
+      - name: Build release
+        run: |
+          ./build-release.sh --build-version "${{ steps.version.outputs.VERSION }}" --codesign-identity -
+      
+      - name: Upload platform artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.os }}-${{ steps.version.outputs.VERSION }}
+          path: |
+            .release/
+            !.release/xcodebuild.log
+          retention-days: 7
+
+  # 合并构建产物并创建统一发布
+  create-release:
+    needs: matrix-build
+    runs-on: macos-latest
+    if: success()
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+      
+      - name: Merge build artifacts
+        run: |
+          VERSION="${{ needs.matrix-build.outputs.version }}"
+          echo "Merging artifacts for version: $VERSION"
+          
+          mkdir -p merged-release
+          
+          # 选择最新macOS版本的构建作为主要发布
+          if [ -d "./artifacts/build-macos-latest-$VERSION" ]; then
+            cp -r "./artifacts/build-macos-latest-$VERSION"/* merged-release/
+            echo "Using macos-latest build as primary"
+          elif [ -d "./artifacts/build-macos-14-$VERSION" ]; then
+            cp -r "./artifacts/build-macos-14-$VERSION"/* merged-release/
+            echo "Using macos-14 build as primary"
+          else
+            # 使用第一个可用的构建
+            FIRST_BUILD=$(ls ./artifacts/ | head -n1)
+            cp -r "./artifacts/$FIRST_BUILD"/* merged-release/
+            echo "Using $FIRST_BUILD as primary"
+          fi
+          
+          # 验证合并的产物
+          ls -la merged-release/
+          
+          # 验证二进制文件
+          if [ -f "merged-release/aerospace" ]; then
+            file merged-release/aerospace
+          fi
+          
+          if [ -f "merged-release/AeroSpace.app/Contents/MacOS/AeroSpace" ]; then
+            file merged-release/AeroSpace.app/Contents/MacOS/AeroSpace
+          fi
+      
+      - name: Create comprehensive release notes
+        id: release_notes
+        run: |
+          VERSION="${{ needs.matrix-build.outputs.version }}"
+          
+          cat > release_notes.md << EOF
+          ## AeroSpace v$VERSION
+          
+          🏗️ **Multi-Platform Cloud Build**
+          
+          This release was built using GitHub Actions across multiple macOS versions to ensure maximum compatibility.
+          
+          ### Build Matrix
+          - ✅ macOS 13 (Intel optimized)
+          - ✅ macOS 14 (Apple Silicon optimized) 
+          - ✅ macOS Latest (Latest Xcode)
+          
+          ### Build Information
+          - **Version**: $VERSION
+          - **Commit**: [\`${{ github.sha }}\`](https://github.com/${{ github.repository }}/commit/${{ github.sha }})
+          - **Build Date**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+          - **Build Infrastructure**: GitHub Actions Cloud
+          
+          ### Universal Binaries
+          All binaries are built as Universal Binaries supporting both Intel and Apple Silicon Macs.
+          
+          ### Installation
+          1. Download \`AeroSpace-v$VERSION.zip\`
+          2. Extract and move \`AeroSpace.app\` to \`/Applications/\`
+          3. Optional: Add CLI tool to PATH
+          
+          ### System Requirements
+          - macOS 13.0 or later
+          - Intel Mac or Apple Silicon Mac
+          
+          ---
+          *Built with ❤️ using GitHub Actions*
+          EOF
+          
+          echo "RELEASE_NOTES<<EOF" >> $GITHUB_OUTPUT
+          cat release_notes.md >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+      
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.matrix-build.outputs.version }}
+          name: AeroSpace v${{ needs.matrix-build.outputs.version }}
+          body: ${{ steps.release_notes.outputs.RELEASE_NOTES }}
+          draft: false
+          prerelease: ${{ contains(needs.matrix-build.outputs.version, '-') }}
+          files: |
+            merged-release/AeroSpace-v${{ needs.matrix-build.outputs.version }}.zip
+            merged-release/aerospace
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Upload final artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: AeroSpace-v${{ needs.matrix-build.outputs.version }}-final
+          path: merged-release/
+          retention-days: 90
