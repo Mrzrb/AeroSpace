@@ -115,6 +115,7 @@ private let configParser: [String: any ParserProtocol<Config>] = [
     "on-window-detected": Parser(\.onWindowDetected, parseOnWindowDetectedArray),
 
     "bsp": Parser(\.bsp, parseBSPConfig),
+    "animation": Parser(\.animation, parseAnimationConfig),
 
     // Deprecated
     "non-empty-workspaces-root-containers-layout-on-startup": Parser(\._nonEmptyWorkspacesRootContainersLayoutOnStartup, parseStartupRootContainerLayout),
@@ -427,5 +428,42 @@ private func parseOptionalOrientation(_ raw: TOMLValueConvertible, _ backtrace: 
             default:
                 return .failure(.semantic(backtrace, "Invalid orientation '\(str)'. Expected 'horizontal', 'vertical', or 'auto'"))
         }
+    }
+}
+
+private let animationConfigParser: [String: any ParserProtocol<AnimationConfig>] = [
+    "enabled": Parser(\.enabled, parseBool),
+    "default-duration": Parser(\.defaultDuration, parseTimeInterval),
+    "easing-function": Parser(\.easingFunction, parseAnimationEasing),
+    "respect-system-preferences": Parser(\.respectSystemPreferences, parseBool),
+    "move-animation-enabled": Parser(\.moveAnimationEnabled, parseBool),
+    "resize-animation-enabled": Parser(\.resizeAnimationEnabled, parseBool),
+    "layout-change-animation-enabled": Parser(\.layoutChangeAnimationEnabled, parseBool),
+    "workspace-transition-animation-enabled": Parser(\.workspaceTransitionAnimationEnabled, parseBool),
+    "max-concurrent-animations": Parser(\.maxConcurrentAnimations, parseInt),
+    "adaptive-quality": Parser(\.adaptiveQuality, parseBool),
+    "min-frame-rate": Parser(\.minFrameRate, parseDouble),
+]
+
+private func parseAnimationConfig(_ raw: TOMLValueConvertible, _ backtrace: TomlBacktrace, _ errors: inout [TomlParseError]) -> AnimationConfig {
+    let config = parseTable(raw, AnimationConfig(), animationConfigParser, backtrace, &errors)
+    
+    // Validate the configuration
+    let validationErrors = config.validate()
+    for error in validationErrors {
+        errors.append(.semantic(backtrace, error))
+    }
+    
+    return config
+}
+
+private func parseTimeInterval(_ raw: TOMLValueConvertible, _ backtrace: TomlBacktrace) -> ParsedToml<TimeInterval> {
+    parseDouble(raw, backtrace).map { TimeInterval($0) }
+}
+
+private func parseAnimationEasing(_ raw: TOMLValueConvertible, _ backtrace: TomlBacktrace) -> ParsedToml<AnimationEasing> {
+    parseString(raw, backtrace).flatMap { str in
+        AnimationEasing(rawValue: str)
+            .orFailure(.semantic(backtrace, "Invalid animation easing '\(str)'. Expected one of: \(AnimationEasing.allCases.map(\.rawValue).joined(separator: ", "))"))
     }
 }

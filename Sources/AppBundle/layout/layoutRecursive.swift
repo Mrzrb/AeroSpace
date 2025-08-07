@@ -31,11 +31,23 @@ extension TreeNode {
                     lastAppliedLayoutVirtualRect = virtual
                     if window.isFullscreen && window == context.workspace.rootTilingContainer.mostRecentWindowRecursive {
                         lastAppliedLayoutPhysicalRect = nil
-                        window.layoutFullscreen(context)
+                        try await window.layoutFullscreen(context)
                     } else {
                         lastAppliedLayoutPhysicalRect = physicalRect
                         window.isFullscreen = false
-                        window.setAxFrame(point, CGSize(width: width, height: height))
+                        
+                        // Use animation for layout changes if enabled
+                        if config.animation.enabled && config.animation.layoutChangeAnimationEnabled {
+                            do {
+                                let targetRect = Rect(topLeftX: point.x, topLeftY: point.y, width: width, height: height)
+                                try await WindowAnimationEngine.shared.animateWindow(window, to: targetRect)
+                            } catch {
+                                // Fallback to immediate positioning if animation fails
+                                window.setAxFrameImmediate(point, CGSize(width: width, height: height))
+                            }
+                        } else {
+                            window.setAxFrame(point, CGSize(width: width, height: height))
+                        }
                     }
                 }
             case .tilingContainer(let container):
@@ -77,23 +89,48 @@ extension Window {
             let yProportion = (windowTopLeftCorner.y - currentMonitor.visibleRect.topLeftY) / currentMonitor.visibleRect.height
 
             let moveTo = workspace.workspaceMonitor
-            setAxTopLeftCorner(CGPoint(
+            let newPosition = CGPoint(
                 x: moveTo.visibleRect.topLeftX + xProportion * moveTo.visibleRect.width,
                 y: moveTo.visibleRect.topLeftY + yProportion * moveTo.visibleRect.height,
-            ))
+            )
+            
+            // Use animation for floating window movement if enabled
+            if config.animation.enabled && config.animation.workspaceTransitionAnimationEnabled {
+                do {
+                    try await WindowAnimationEngine.shared.animateWindowPosition(self, to: newPosition)
+                } catch {
+                    // Fallback to immediate positioning if animation fails
+                    setAxTopLeftCornerImmediate(newPosition)
+                }
+            } else {
+                setAxTopLeftCorner(newPosition)
+            }
         }
         if isFullscreen {
-            layoutFullscreen(context)
+            try await layoutFullscreen(context)
             isFullscreen = false
         }
     }
 
     @MainActor // todo can be dropped in future Swift versions?
-    fileprivate func layoutFullscreen(_ context: LayoutContext) {
+    fileprivate func layoutFullscreen(_ context: LayoutContext) async throws {
         let monitorRect = noOuterGapsInFullscreen
             ? context.workspace.workspaceMonitor.visibleRect
             : context.workspace.workspaceMonitor.visibleRectPaddedByOuterGaps
-        setAxFrame(monitorRect.topLeftCorner, CGSize(width: monitorRect.width, height: monitorRect.height))
+        
+        // Use animation for fullscreen layout if enabled
+        if config.animation.enabled && config.animation.layoutChangeAnimationEnabled {
+            do {
+                let targetRect = Rect(topLeftX: monitorRect.topLeftX, topLeftY: monitorRect.topLeftY, 
+                                    width: monitorRect.width, height: monitorRect.height)
+                try await WindowAnimationEngine.shared.animateWindow(self, to: targetRect)
+            } catch {
+                // Fallback to immediate positioning if animation fails
+                setAxFrameImmediate(monitorRect.topLeftCorner, CGSize(width: monitorRect.width, height: monitorRect.height))
+            }
+        } else {
+            setAxFrame(monitorRect.topLeftCorner, CGSize(width: monitorRect.width, height: monitorRect.height))
+        }
     }
 }
 

@@ -152,7 +152,7 @@ final class MacWindow: Window {
                 let onePixelOffset = macApp.isZoom ? .zero : CGPoint(x: 1, y: 1)
                 p = nodeMonitor.visibleRect.bottomRightCorner - onePixelOffset
         }
-        setAxTopLeftCorner(p)
+        setAxTopLeftCornerImmediate(p)
     }
 
     @MainActor
@@ -170,7 +170,7 @@ final class MacWindow: Window {
                     x: workspaceRect.width * prevUnhiddenProportionalPositionInsideWorkspaceRect.x,
                     y: workspaceRect.height * prevUnhiddenProportionalPositionInsideWorkspaceRect.y,
                 )
-                setAxTopLeftCorner(workspaceRect.topLeftCorner + pointInsideWorkspace)
+                setAxTopLeftCornerImmediate(workspaceRect.topLeftCorner + pointInsideWorkspace)
             case .macosNativeFullscreenWindow, .macosNativeHiddenAppWindow, .macosNativeMinimizedWindow,
                  .macosPopupWindow, .tiling, .rootTilingContainer, .shimContainerRelation: break
         }
@@ -187,20 +187,121 @@ final class MacWindow: Window {
         try await macApp.getAxSize(windowId)
     }
 
+    @MainActor
     override func setAxTopLeftCorner(_ point: CGPoint) {
-        macApp.setAxTopLeftCorner(windowId, point)
+        // Check if we should use animation for position changes
+        if config.animation.enabled && config.animation.moveAnimationEnabled {
+            Task {
+                do {
+                    try await WindowAnimationEngine.shared.animateWindowPosition(self, to: point)
+                } catch {
+                    // Fallback to immediate positioning if animation fails
+                    await MainActor.run {
+                        macApp.setAxTopLeftCorner(windowId, point)
+                    }
+                }
+            }
+        } else {
+            macApp.setAxTopLeftCorner(windowId, point)
+        }
     }
 
+    @MainActor
     override func setAxFrame(_ topLeft: CGPoint?, _ size: CGSize?) {
-        macApp.setAxFrame(windowId, topLeft, size)
+        // Check if we should use animation for frame changes
+        if config.animation.enabled && (config.animation.moveAnimationEnabled || config.animation.resizeAnimationEnabled) {
+            Task {
+                do {
+                    // Get current rect to determine what changed
+                    guard let currentRect = try await getAxRect() else {
+                        // Fallback to immediate if we can't get current rect
+                        await MainActor.run {
+                            macApp.setAxFrame(windowId, topLeft, size)
+                        }
+                        return
+                    }
+                    
+                    let targetTopLeft = topLeft ?? CGPoint(x: currentRect.topLeftX, y: currentRect.topLeftY)
+                    let targetSize = size ?? CGSize(width: currentRect.width, height: currentRect.height)
+                    let targetRect = Rect(topLeftX: targetTopLeft.x, topLeftY: targetTopLeft.y, 
+                                        width: targetSize.width, height: targetSize.height)
+                    
+                    try await WindowAnimationEngine.shared.animateWindow(self, to: targetRect)
+                } catch {
+                    // Fallback to immediate positioning if animation fails
+                    await MainActor.run {
+                        macApp.setAxFrame(windowId, topLeft, size)
+                    }
+                }
+            }
+        } else {
+            macApp.setAxFrame(windowId, topLeft, size)
+        }
     }
 
     @MainActor // todo swift is stupid
     override func setAxFrameBlocking(_ topLeft: CGPoint?, _ size: CGSize?) async throws {
-        try await macApp.setAxFrameBlocking(windowId, topLeft, size)
+        // For blocking calls, we need to handle animation differently
+        if config.animation.enabled && (config.animation.moveAnimationEnabled || config.animation.resizeAnimationEnabled) {
+            do {
+                // Get current rect to determine what changed
+                guard let currentRect = try await getAxRect() else {
+                    // Fallback to immediate if we can't get current rect
+                    try await macApp.setAxFrameBlocking(windowId, topLeft, size)
+                    return
+                }
+                
+                let targetTopLeft = topLeft ?? CGPoint(x: currentRect.topLeftX, y: currentRect.topLeftY)
+                let targetSize = size ?? CGSize(width: currentRect.width, height: currentRect.height)
+                let targetRect = Rect(topLeftX: targetTopLeft.x, topLeftY: targetTopLeft.y, 
+                                    width: targetSize.width, height: targetSize.height)
+                
+                try await WindowAnimationEngine.shared.animateWindow(self, to: targetRect)
+            } catch {
+                // Fallback to immediate positioning if animation fails
+                try await macApp.setAxFrameBlocking(windowId, topLeft, size)
+            }
+        } else {
+            try await macApp.setAxFrameBlocking(windowId, topLeft, size)
+        }
     }
 
+    @MainActor
     override func setSizeAsync(_ size: CGSize) {
+        // Check if we should use animation for size changes
+        if config.animation.enabled && config.animation.resizeAnimationEnabled {
+            Task {
+                do {
+                    try await WindowAnimationEngine.shared.animateWindowSize(self, to: size)
+                } catch {
+                    // Fallback to immediate sizing if animation fails
+                    await MainActor.run {
+                        macApp.setAxSize(windowId, size)
+                    }
+                }
+            }
+        } else {
+            macApp.setAxSize(windowId, size)
+        }
+    }
+    
+    // MARK: - Animation Bypass Methods
+    
+    /// Set window position immediately without animation (for cases where immediate updates are required)
+    @MainActor
+    override func setAxTopLeftCornerImmediate(_ point: CGPoint) {
+        macApp.setAxTopLeftCorner(windowId, point)
+    }
+    
+    /// Set window frame immediately without animation (for cases where immediate updates are required)
+    @MainActor
+    override func setAxFrameImmediate(_ topLeft: CGPoint?, _ size: CGSize?) {
+        macApp.setAxFrame(windowId, topLeft, size)
+    }
+    
+    /// Set window size immediately without animation (for cases where immediate updates are required)
+    @MainActor
+    override func setSizeAsyncImmediate(_ size: CGSize) {
         macApp.setAxSize(windowId, size)
     }
 
