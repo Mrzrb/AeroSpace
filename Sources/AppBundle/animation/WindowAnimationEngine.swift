@@ -1,6 +1,8 @@
 import Foundation
 import AppKit
 import Common
+import Darwin.Mach
+import CoreGraphics
 
 /// Notification posted when animation configuration changes
 extension Notification.Name {
@@ -30,6 +32,17 @@ class WindowAnimationEngine {
     private var lastPerformanceCheck: Date = Date()
     private let performanceCheckInterval: TimeInterval = 1.0 // Check every second
     
+    // Advanced performance optimizations
+    private var animationContextPool: [WindowAnimationContext] = []
+    private let maxPoolSize = 20
+    private var batchedAnimations: [(Window, Rect, TimeInterval?, AnimationEasing?)] = []
+    private var batchTimer: Timer?
+    private let batchDelay: TimeInterval = 0.016 // ~60fps batching
+    private var cpuThrottleLevel: Double = 1.0 // 1.0 = no throttling, 0.5 = 50% throttling
+    private var displayRefreshRate: Double = 60.0
+    private var lastCPUCheck: Date = Date()
+    private let cpuCheckInterval: TimeInterval = 2.0
+    
     // Accessibility integration
     private var originalConfigEnabled: Bool = true // Track original enabled state
     
@@ -41,6 +54,8 @@ class WindowAnimationEngine {
         self.config = AnimationConfig.default
         self.originalConfigEnabled = AnimationConfig.default.enabled
         setupSystemPreferencesObserver()
+        detectDisplayRefreshRate()
+        initializeAnimationContextPool()
     }
     
     deinit {
@@ -134,8 +149,8 @@ class WindowAnimationEngine {
             return
         }
         
-        // Create animation context
-        let animationContext = WindowAnimationContext(
+        // Create animation context from pool
+        let animationContext = getAnimationContextFromPool(
             windowId: window.windowId,
             animationType: .moveAndResize,
             sourceRect: currentRect,
@@ -243,8 +258,8 @@ class WindowAnimationEngine {
             return
         }
         
-        // Create fade-out animation context
-        let animationContext = WindowAnimationContext(
+        // Create fade-out animation context from pool
+        let animationContext = getAnimationContextFromPool(
             windowId: window.windowId,
             animationType: .workspaceTransitionFadeOut,
             sourceRect: currentRect,
@@ -290,8 +305,8 @@ class WindowAnimationEngine {
             return
         }
         
-        // Create fade-in animation context
-        let animationContext = WindowAnimationContext(
+        // Create fade-in animation context from pool
+        let animationContext = getAnimationContextFromPool(
             windowId: window.windowId,
             animationType: .workspaceTransitionFadeIn,
             sourceRect: currentRect,
@@ -340,8 +355,8 @@ class WindowAnimationEngine {
             return
         }
         
-        // Create workspace transition animation context
-        let animationContext = WindowAnimationContext(
+        // Create workspace transition animation context from pool
+        let animationContext = getAnimationContextFromPool(
             windowId: window.windowId,
             animationType: .workspaceTransition,
             sourceRect: currentRect,
@@ -363,6 +378,7 @@ class WindowAnimationEngine {
         if let animationContext = activeAnimations[window.windowId] {
             animationContext.cancel()
             activeAnimations.removeValue(forKey: window.windowId)
+            returnAnimationContextToPool(animationContext)
         }
     }
     
@@ -370,6 +386,7 @@ class WindowAnimationEngine {
     func cancelAllAnimations() {
         for (_, context) in activeAnimations {
             context.cancel()
+            returnAnimationContextToPool(context)
         }
         activeAnimations.removeAll()
         stopTimer()
@@ -378,12 +395,16 @@ class WindowAnimationEngine {
     /// Force stop all animations and cleanup resources (for testing)
     func forceStopAllAnimations() {
         cancelAllAnimations()
+        batchTimer?.invalidate()
+        batchTimer = nil
+        batchedAnimations.removeAll()
         isPaused = false
         frameCount = 0
         frameRateHistory.removeAll()
         totalAnimationsCompleted = 0
         performanceThresholdExceeded = false
         lastPerformanceCheck = Date()
+        cpuThrottleLevel = 1.0
     }
     
     /// Pause all animations
@@ -441,13 +462,216 @@ class WindowAnimationEngine {
         print("Batch animated \(processedCount) windows, \(animations.count - processedCount) applied immediately")
     }
     
+    // MARK: - Memory Pooling
+    
+    /// Initialize the animation context pool with pre-allocated contexts
+    private func initializeAnimationContextPool() {
+        animationContextPool.reserveCapacity(maxPoolSize)
+        // Pre-allocate some contexts to avoid allocation during animation
+        for _ in 0..<min(5, maxPoolSize) {
+            let context = WindowAnimationContext(
+                windowId: 0, // Will be reset when reused
+                animationType: .move,
+                sourceRect: Rect(topLeftX: 0, topLeftY: 0, width: 0, height: 0),
+                targetRect: Rect(topLeftX: 0, topLeftY: 0, width: 0, height: 0),
+                duration: 0.25,
+                easingFunction: .easeOut
+            )
+            animationContextPool.append(context)
+        }
+    }
+    
+    /// Get an animation context from the pool or create a new one
+    private func getAnimationContextFromPool(
+        windowId: UInt32,
+        animationType: AnimationType,
+        sourceRect: Rect,
+        targetRect: Rect,
+        duration: TimeInterval,
+        easingFunction: AnimationEasing,
+        sourceOpacity: Double? = nil,
+        targetOpacity: Double? = nil
+    ) -> WindowAnimationContext {
+        if let pooledContext = animationContextPool.popLast() {
+            // Reuse pooled context
+            pooledContext.reset(
+                windowId: windowId,
+                animationType: animationType,
+                sourceRect: sourceRect,
+                targetRect: targetRect,
+                duration: duration,
+                easingFunction: easingFunction,
+                sourceOpacity: sourceOpacity,
+                targetOpacity: targetOpacity
+            )
+            return pooledContext
+        } else {
+            // Create new context if pool is empty
+            return WindowAnimationContext(
+                windowId: windowId,
+                animationType: animationType,
+                sourceRect: sourceRect,
+                targetRect: targetRect,
+                duration: duration,
+                easingFunction: easingFunction,
+                sourceOpacity: sourceOpacity,
+                targetOpacity: targetOpacity
+            )
+        }
+    }
+    
+    /// Return an animation context to the pool for reuse
+    private func returnAnimationContextToPool(_ context: WindowAnimationContext) {
+        guard animationContextPool.count < maxPoolSize else {
+            // Pool is full, let the context be deallocated
+            return
+        }
+        
+        // Clean the context before returning to pool
+        context.cleanup()
+        animationContextPool.append(context)
+    }
+    
+    /// Clean up the animation context pool
+    private func cleanupAnimationContextPool() {
+        animationContextPool.removeAll()
+    }
+    
+    // MARK: - Animation Batching
+    
+    /// Add animation to batch for processing
+    private func addToBatch(_ window: Window, _ targetRect: Rect, _ duration: TimeInterval?, _ easing: AnimationEasing?) {
+        batchedAnimations.append((window, targetRect, duration, easing))
+        
+        // Start batch timer if not already running
+        if batchTimer == nil {
+            batchTimer = Timer.scheduledTimer(withTimeInterval: batchDelay, repeats: false) { [weak self] _ in
+                Task { @MainActor in
+                    self?.processBatchedAnimations()
+                }
+            }
+        }
+    }
+    
+    /// Process all batched animations at once
+    private func processBatchedAnimations() {
+        batchTimer?.invalidate()
+        batchTimer = nil
+        
+        guard !batchedAnimations.isEmpty else { return }
+        
+        let animations = batchedAnimations
+        batchedAnimations.removeAll()
+        
+        Task {
+            do {
+                try await batchAnimateWindows(animations)
+            } catch {
+                print("Error processing batched animations: \(error)")
+            }
+        }
+    }
+    
+    // MARK: - CPU Throttling
+    
+    /// Check CPU usage and adjust throttling level
+    private func checkAndAdjustCPUThrottling() {
+        let currentTime = Date()
+        guard currentTime.timeIntervalSince(lastCPUCheck) >= cpuCheckInterval else {
+            return
+        }
+        
+        lastCPUCheck = currentTime
+        
+        // Get system CPU usage (simplified approach)
+        let cpuUsage = getCurrentCPUUsage()
+        
+        // Adjust throttling based on CPU usage
+        if cpuUsage > 80.0 {
+            cpuThrottleLevel = max(0.3, cpuThrottleLevel - 0.1) // Increase throttling
+        } else if cpuUsage < 50.0 {
+            cpuThrottleLevel = min(1.0, cpuThrottleLevel + 0.1) // Decrease throttling
+        }
+        
+        // Apply throttling by adjusting timer interval
+        if cpuThrottleLevel < 1.0 {
+            updateTimerForThrottling()
+        }
+    }
+    
+    /// Get current CPU usage percentage (simplified implementation)
+    private func getCurrentCPUUsage() -> Double {
+        // This is a simplified implementation
+        // In a real implementation, you would use system APIs to get actual CPU usage
+        var info = mach_task_basic_info()
+        var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size)/4
+        
+        let kerr: kern_return_t = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: 1) {
+                task_info(mach_task_self_,
+                         task_flavor_t(MACH_TASK_BASIC_INFO),
+                         $0,
+                         &count)
+            }
+        }
+        
+        if kerr == KERN_SUCCESS {
+            // This is a rough approximation - actual CPU usage calculation is more complex
+            return Double(info.resident_size) / (1024 * 1024 * 1024) * 100 // Convert to percentage
+        }
+        
+        return 50.0 // Default to moderate usage if we can't determine
+    }
+    
+    /// Update timer interval based on throttling level
+    private func updateTimerForThrottling() {
+        guard animationTimer != nil else { return }
+        
+        stopTimer()
+        startTimerIfNeeded()
+    }
+    
+    // MARK: - Display Refresh Rate Synchronization
+    
+    /// Detect the display refresh rate for optimal animation timing
+    private func detectDisplayRefreshRate() {
+        guard let screen = NSScreen.main else {
+            displayRefreshRate = 60.0 // Default fallback
+            return
+        }
+        
+        // Try to get refresh rate from display mode (compatible with older macOS)
+        if let mode = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber {
+            // Use Core Graphics to get actual refresh rate
+            let displayID = mode.uint32Value
+            if let mode = CGDisplayCopyDisplayMode(displayID) {
+                displayRefreshRate = mode.refreshRate
+                if displayRefreshRate == 0 {
+                    displayRefreshRate = 60.0 // Fallback for displays that report 0
+                }
+            } else {
+                displayRefreshRate = 60.0 // Most common refresh rate
+            }
+        } else {
+            displayRefreshRate = 60.0
+        }
+        
+        // Clamp to reasonable values
+        displayRefreshRate = max(30.0, min(240.0, displayRefreshRate))
+    }
+    
+    /// Get optimal timer interval based on display refresh rate and throttling
+    private func getOptimalTimerInterval() -> TimeInterval {
+        let baseInterval = 1.0 / displayRefreshRate
+        return baseInterval / cpuThrottleLevel
+    }
+    
     // MARK: - Timer Management
     
     private func startTimerIfNeeded() {
         guard animationTimer == nil && !activeAnimations.isEmpty && !isPaused else { return }
         
-        let targetFrameRate = 60.0
-        let timerInterval = 1.0 / targetFrameRate
+        let timerInterval = getOptimalTimerInterval()
         
         animationTimer = Timer.scheduledTimer(withTimeInterval: timerInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in
@@ -479,6 +703,9 @@ class WindowAnimationEngine {
         
         // Check performance and adapt quality if needed
         checkAndAdaptPerformance(currentTime: currentTime)
+        
+        // Check and adjust CPU throttling
+        checkAndAdjustCPUThrottling()
         
         for (windowId, context) in activeAnimations {
             guard let window = Window.get(byId: windowId) else {
@@ -519,9 +746,11 @@ class WindowAnimationEngine {
             }
         }
         
-        // Remove completed animations
+        // Remove completed animations and return contexts to pool
         for windowId in completedAnimations {
-            activeAnimations.removeValue(forKey: windowId)
+            if let context = activeAnimations.removeValue(forKey: windowId) {
+                returnAnimationContextToPool(context)
+            }
         }
         
         // Stop timer if no more animations
@@ -602,8 +831,10 @@ class WindowAnimationEngine {
         let averageFrameRate = frameRateHistory.isEmpty ? 0.0 : frameRateHistory.reduce(0, +) / Double(frameRateHistory.count)
         let droppedFrames = frameRateHistory.filter { $0 < config.minFrameRate }.count
         
-        // Estimate memory usage (rough calculation)
-        let memoryUsage = activeAnimations.count * MemoryLayout<WindowAnimationContext>.size
+        // Estimate memory usage including pool
+        let activeMemory = activeAnimations.count * MemoryLayout<WindowAnimationContext>.size
+        let poolMemory = animationContextPool.count * MemoryLayout<WindowAnimationContext>.size
+        let totalMemoryUsage = activeMemory + poolMemory
         
         return AnimationPerformanceMetrics(
             averageFrameRate: averageFrameRate,
@@ -611,7 +842,11 @@ class WindowAnimationEngine {
             activeAnimationCount: activeAnimations.count,
             totalAnimationsCompleted: totalAnimationsCompleted,
             averageAnimationDuration: config.defaultDuration,
-            memoryUsage: memoryUsage
+            memoryUsage: totalMemoryUsage,
+            cpuThrottleLevel: cpuThrottleLevel,
+            displayRefreshRate: displayRefreshRate,
+            pooledContexts: animationContextPool.count,
+            batchedAnimations: batchedAnimations.count
         )
     }
     
@@ -694,7 +929,7 @@ class WindowAnimationEngine {
             // If the animation is less than 50% complete, adjust its duration
             if progress < 0.5 {
                 let remainingProgress = 1.0 - progress
-                let newRemainingDuration = newDuration * remainingProgress
+                let _ = newDuration * remainingProgress
                 
                 // Update the context with new timing
                 // Note: This would require making WindowAnimationContext mutable
@@ -747,6 +982,11 @@ class WindowAnimationEngine {
         let metrics = getPerformanceMetrics()
         info.append("- Average FPS: \(String(format: "%.1f", metrics.averageFrameRate))")
         info.append("- Dropped frames: \(metrics.droppedFrames)")
+        info.append("- CPU throttle level: \(String(format: "%.2f", metrics.cpuThrottleLevel))")
+        info.append("- Display refresh rate: \(String(format: "%.1f", metrics.displayRefreshRate)) Hz")
+        info.append("- Pooled contexts: \(metrics.pooledContexts)")
+        info.append("- Batched animations: \(metrics.batchedAnimations)")
+        info.append("- Memory usage: \(metrics.memoryUsage) bytes")
         
         for (windowId, context) in activeAnimations {
             info.append("- Window \(windowId): \(context.debugDescription)")

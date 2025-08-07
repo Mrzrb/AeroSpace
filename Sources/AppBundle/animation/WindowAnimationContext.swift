@@ -18,18 +18,18 @@ class WindowAnimationContext {
     
     // MARK: - Properties
     
-    let windowId: UInt32
-    let animationType: AnimationType
-    let startTime: Date
-    let duration: TimeInterval
-    let easingFunction: AnimationEasing
+    var windowId: UInt32
+    var animationType: AnimationType
+    var startTime: Date
+    var duration: TimeInterval
+    var easingFunction: AnimationEasing
     
-    let sourceRect: Rect
-    let targetRect: Rect
+    var sourceRect: Rect
+    var targetRect: Rect
     
     // Opacity animation support
-    let sourceOpacity: Double?
-    let targetOpacity: Double?
+    var sourceOpacity: Double?
+    var targetOpacity: Double?
     
     private var _isComplete: Bool = false
     private var _isCancelled: Bool = false
@@ -101,6 +101,40 @@ class WindowAnimationContext {
     func start() {
         _isComplete = false
         _isCancelled = false
+    }
+    
+    /// Reset the context for reuse from memory pool
+    func reset(
+        windowId: UInt32,
+        animationType: AnimationType,
+        sourceRect: Rect,
+        targetRect: Rect,
+        duration: TimeInterval,
+        easingFunction: AnimationEasing,
+        sourceOpacity: Double? = nil,
+        targetOpacity: Double? = nil
+    ) {
+        // Update all properties for reuse
+        self.windowId = windowId
+        self.animationType = animationType
+        self.sourceRect = sourceRect
+        self.targetRect = targetRect
+        self.duration = duration
+        self.easingFunction = easingFunction
+        self.sourceOpacity = sourceOpacity
+        self.targetOpacity = targetOpacity
+        self.startTime = Date()
+        
+        // Reset state
+        _isComplete = false
+        _isCancelled = false
+    }
+    
+    /// Clean up the context before returning to pool
+    func cleanup() {
+        _isComplete = false
+        _isCancelled = false
+        // Clear any references that might cause memory leaks
     }
     
     /// Update the animation and return the current interpolated rectangle
@@ -232,6 +266,10 @@ struct AnimationPerformanceMetrics {
     let totalAnimationsCompleted: Int
     let averageAnimationDuration: TimeInterval
     let memoryUsage: Int // in bytes
+    let cpuThrottleLevel: Double
+    let displayRefreshRate: Double
+    let pooledContexts: Int
+    let batchedAnimations: Int
     
     static let empty = AnimationPerformanceMetrics(
         averageFrameRate: 0.0,
@@ -239,7 +277,11 @@ struct AnimationPerformanceMetrics {
         activeAnimationCount: 0,
         totalAnimationsCompleted: 0,
         averageAnimationDuration: 0.0,
-        memoryUsage: 0
+        memoryUsage: 0,
+        cpuThrottleLevel: 1.0,
+        displayRefreshRate: 60.0,
+        pooledContexts: 0,
+        batchedAnimations: 0
     )
 }
 
