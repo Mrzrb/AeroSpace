@@ -4,7 +4,7 @@ public struct OptimizeBSPCmdArgs: CmdArgs {
     public static let parser: CmdParser<Self> = cmdParser(
         kind: .optimizeBSP,
         allowInConfig: true,
-        help: optimize_bsp_help_generated,
+        help: "",
         options: [
             "--window-id": optionalWindowIdFlag(),
             "--workspace": optionalWorkspaceFlag(),
