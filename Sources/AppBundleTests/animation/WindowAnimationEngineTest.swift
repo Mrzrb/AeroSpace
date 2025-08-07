@@ -16,6 +16,7 @@ final class WindowAnimationEngineTest: XCTestCase {
         var config = AnimationConfig.default
         config.enabled = false
         config.defaultDuration = 0.5
+        config.respectSystemPreferences = false // Disable system preference checking for tests
         
         engine.updateConfiguration(config)
         
@@ -79,6 +80,7 @@ final class WindowAnimationEngineTest: XCTestCase {
         let engine = WindowAnimationEngine.shared
         var config = AnimationConfig.default
         config.enabled = false
+        config.respectSystemPreferences = false // Disable system preference checking for tests
         engine.updateConfiguration(config)
         
         // Verify configuration was updated

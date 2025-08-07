@@ -22,9 +22,13 @@ var defaultConfigUrl: URL {
     }
 }
 @MainActor let defaultConfig: Config = {
-    let parsedConfig = parseConfig((try? String(contentsOf: defaultConfigUrl)).orDie())
+    guard let configContent = try? String(contentsOf: defaultConfigUrl) else {
+        return Config() // Return default config if file can't be read
+    }
+    let parsedConfig = parseConfig(configContent)
     if !parsedConfig.errors.isEmpty {
-        die("Can't parse default config: \(parsedConfig.errors)")
+        print("Warning: Can't parse default config: \(parsedConfig.errors)")
+        return Config() // Return default config if parsing fails
     }
     return parsedConfig.config
 }()

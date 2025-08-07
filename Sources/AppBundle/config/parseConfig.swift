@@ -114,15 +114,9 @@ private let configParser: [String: any ParserProtocol<Config>] = [
     "workspace-to-monitor-force-assignment": Parser(\.workspaceToMonitorForceAssignment, parseWorkspaceToMonitorAssignment),
     "on-window-detected": Parser(\.onWindowDetected, parseOnWindowDetectedArray),
 
-<<<<<<< Updated upstream
     "bsp": Parser(\.bsp, parseBSPConfig),
     "animation": Parser(\.animation, parseAnimationConfig),
-||||||| Stash base
-    "bsp": Parser(\.bsp, parseBSPConfig),
-=======
-
->>>>>>> Stashed changes
-
+    "animations": Parser(\.animation, parseAnimationConfig), // Support both singular and plural forms
     // Deprecated
     "non-empty-workspaces-root-containers-layout-on-startup": Parser(\._nonEmptyWorkspacesRootContainersLayoutOnStartup, parseStartupRootContainerLayout),
     "indent-for-nested-containers-with-the-same-orientation": Parser(\._indentForNestedContainersWithTheSameOrientation, parseIndentForNestedContainersWithTheSameOrientation),

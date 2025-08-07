@@ -148,12 +148,16 @@ class RuntimeConfigurationTest: XCTestCase {
         var config = AnimationConfig.default
         config.enabled = true
         config.defaultDuration = 0.1 // Short duration for testing
+        config.respectSystemPreferences = false // Disable system preference checking for tests
         
         animationEngine.updateConfiguration(config)
         
         // Create a test window and start an animation
         let workspace = Workspace.get(byName: "test")
         let testWindow = TestWindow.new(id: 1, parent: workspace.rootTilingContainer, adaptiveWeight: 1.0)
+        
+        // Set initial position for the test window
+        testWindow.setTestRect(Rect(topLeftX: 50, topLeftY: 50, width: 150, height: 150))
         
         let targetRect = Rect(topLeftX: 100, topLeftY: 100, width: 200, height: 200)
         

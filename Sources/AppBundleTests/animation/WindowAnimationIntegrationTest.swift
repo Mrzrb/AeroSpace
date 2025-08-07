@@ -125,6 +125,7 @@ class WindowAnimationIntegrationTest: XCTestCase {
         // Disable animations
         var testConfig = AnimationConfig.default
         testConfig.enabled = false
+        testConfig.respectSystemPreferences = false // Disable system preference checking for tests
         animationEngine.updateConfiguration(testConfig)
         
         let initialPosition = CGPoint(x: 100, y: 100)

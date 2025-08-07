@@ -8,6 +8,7 @@ struct ResizeCommand: Command { // todo cover with tests
     func run(_ env: CmdEnv, _ io: CmdIo) -> Bool {
         guard let target = args.resolveTargetOrReportError(env, io) else { return false }
 
+
         let candidates = target.windowOrNil?.parentsWithSelf
             .filter {
                 let layout = ($0.parent as? TilingContainer)?.layout
@@ -40,7 +41,7 @@ struct ResizeCommand: Command { // todo cover with tests
         guard let orientation else { return false }
         guard let node else { return false }
         // Use the same logic for both BSP and tiles layouts
-        // The key insight: let BSP use the same weight system as tiles
+        // The key insight: let BSP use the same weight system as tiles, but normalize at layout time
         let diff: CGFloat = switch args.units.val {
             case .set(let unit): CGFloat(unit) - node.getWeight(orientation)
             case .add(let unit): CGFloat(unit)
@@ -50,9 +51,20 @@ struct ResizeCommand: Command { // todo cover with tests
         guard let childDiff = diff.div(parent.children.count - 1) else { return false }
         parent.children.lazy
             .filter { $0 != node }
-            .forEach { $0.setWeight(parent.orientation, $0.getWeight(parent.orientation) - childDiff) }
+            .forEach { $0.setWeight(orientation, $0.getWeight(orientation) - childDiff) }
 
         node.setWeight(orientation, node.getWeight(orientation) + diff)
+        
+        // For BSP layouts, normalize weights to sum to 1.0 after resize
+        if parent.layout == .bsp {
+            let totalWeight = parent.children.sumOfDouble { $0.getWeight(orientation) }
+            if totalWeight > 0 {
+                for child in parent.children {
+                    child.setWeight(orientation, child.getWeight(orientation) / totalWeight)
+                }
+            }
+        }
+        
         return true
     }
 }
