@@ -23,12 +23,12 @@ struct Rect: ConvenienceCopyable, AeroAny, Equatable {
         self._width = width
         self._height = height
     }
-    
+
     static func == (lhs: Rect, rhs: Rect) -> Bool {
         return lhs.topLeftX == rhs.topLeftX &&
-               lhs.topLeftY == rhs.topLeftY &&
-               lhs.width == rhs.width &&
-               lhs.height == rhs.height
+            lhs.topLeftY == rhs.topLeftY &&
+            lhs.width == rhs.width &&
+            lhs.height == rhs.height
     }
 }
 

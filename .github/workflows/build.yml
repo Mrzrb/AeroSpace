@@ -29,7 +29,7 @@ jobs:
 
     steps:
       - run: env # Debug
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: xcode-select
         run: |
           sw_vers -productVersion
@@ -38,11 +38,48 @@ jobs:
           else
             sudo xcode-select -s "$XCODE_16_DEVELOPER_DIR" # Affects macOS SDK
           fi
-      - run: brew update && brew install bash fish xcbeautify swiftly
-      - run: swiftly init --skip-install --assume-yes --verbose && swiftly install
-      - run: ./script/install-dep.sh --all
-      - run: ./build-debug.sh
-      - run: ./run-tests.sh
+      - name: Install dependencies
+        run: |
+          set -e
+          echo "Installing dependencies..."
+          brew update
+          brew install bash fish xcbeautify swiftly
+          echo "Dependencies installed successfully"
+      - name: Setup Swift
+        run: |
+          set -e
+          echo "Setting up Swift..."
+          swiftly init --skip-install --assume-yes --verbose
+          swiftly install
+          echo "Swift setup completed"
+      - name: Install project dependencies
+        run: |
+          set -e
+          echo "Installing project dependencies..."
+          ./script/install-dep.sh --all
+          echo "Project dependencies installed"
+      - name: Build debug
+        run: |
+          set -e
+          echo "Building debug version..."
+          ./build-debug.sh
+          echo "Debug build completed"
+      - name: Pre-test validation
+        run: |
+          echo "=== Pre-test validation ==="
+          echo "Swift version:"
+          swift --version
+          echo "Xcode version:"
+          xcode-select -p
+          xcodebuild -version
+          echo "Environment check completed"
+          
+      - name: Run tests
+        run: |
+          set -e
+          echo "Running tests..."
+          ./run-tests.sh
+          echo "All tests passed"
         # We build release artifacts only on the latest macOS because:
         # 1. It cuts the build time twice on GH Actions
         # 2. The latest Xcode version is not available on old macOS, and old Xcode versions bundle too old Swift version
@@ -54,6 +91,19 @@ jobs:
             ./build-release.sh --codesign-identity -
             ./install-from-sources.sh --dont-rebuild
           fi
-      - name: cat ./.release/xcodebuild.log
-        if: ${{ always() }}
-        run: 'if test -f ./.release/xcodebuild.log; then cat ./.release/xcodebuild.log; fi'
+      - name: Show build logs on failure
+        if: ${{ failure() }}
+        run: |
+          echo "=== Build failed, showing logs ==="
+          if test -f ./.release/xcodebuild.log; then
+            echo "=== xcodebuild.log ==="
+            cat ./.release/xcodebuild.log
+          fi
+          if test -f ./.debug/build.log; then
+            echo "=== debug build.log ==="
+            cat ./.debug/build.log
+          fi
+          echo "=== Environment info ==="
+          sw_vers
+          xcode-select -p
+          swift --version

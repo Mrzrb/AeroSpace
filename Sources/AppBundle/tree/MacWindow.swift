@@ -220,12 +220,12 @@ final class MacWindow: Window {
                         }
                         return
                     }
-                    
+
                     let targetTopLeft = topLeft ?? CGPoint(x: currentRect.topLeftX, y: currentRect.topLeftY)
                     let targetSize = size ?? CGSize(width: currentRect.width, height: currentRect.height)
-                    let targetRect = Rect(topLeftX: targetTopLeft.x, topLeftY: targetTopLeft.y, 
-                                        width: targetSize.width, height: targetSize.height)
-                    
+                    let targetRect = Rect(topLeftX: targetTopLeft.x, topLeftY: targetTopLeft.y,
+                                          width: targetSize.width, height: targetSize.height)
+
                     try await WindowAnimationEngine.shared.animateWindow(self, to: targetRect)
                 } catch {
                     // Fallback to immediate positioning if animation fails
@@ -250,12 +250,12 @@ final class MacWindow: Window {
                     try await macApp.setAxFrameBlocking(windowId, topLeft, size)
                     return
                 }
-                
+
                 let targetTopLeft = topLeft ?? CGPoint(x: currentRect.topLeftX, y: currentRect.topLeftY)
                 let targetSize = size ?? CGSize(width: currentRect.width, height: currentRect.height)
-                let targetRect = Rect(topLeftX: targetTopLeft.x, topLeftY: targetTopLeft.y, 
-                                    width: targetSize.width, height: targetSize.height)
-                
+                let targetRect = Rect(topLeftX: targetTopLeft.x, topLeftY: targetTopLeft.y,
+                                      width: targetSize.width, height: targetSize.height)
+
                 try await WindowAnimationEngine.shared.animateWindow(self, to: targetRect)
             } catch {
                 // Fallback to immediate positioning if animation fails
@@ -284,27 +284,27 @@ final class MacWindow: Window {
             macApp.setAxSize(windowId, size)
         }
     }
-    
+
     // MARK: - Animation Bypass Methods
-    
+
     /// Set window position immediately without animation (for cases where immediate updates are required)
     @MainActor
     override func setAxTopLeftCornerImmediate(_ point: CGPoint) {
         macApp.setAxTopLeftCorner(windowId, point)
     }
-    
+
     /// Set window frame immediately without animation (for cases where immediate updates are required)
     @MainActor
     override func setAxFrameImmediate(_ topLeft: CGPoint?, _ size: CGSize?) {
         macApp.setAxFrame(windowId, topLeft, size)
     }
-    
+
     /// Set window size immediately without animation (for cases where immediate updates are required)
     @MainActor
     override func setSizeAsyncImmediate(_ size: CGSize) {
         macApp.setAxSize(windowId, size)
     }
-    
+
     /// Set window alpha/opacity immediately without animation (for workspace transition effects)
     @MainActor
     override func setAxAlphaImmediate(_ alpha: Double) {

@@ -30,14 +30,14 @@ private func parseOptionalOrientation(_ raw: TOMLValueConvertible, _ backtrace: 
     }
     return parseString(raw, backtrace).flatMap { str in
         switch str.lowercased() {
-        case "horizontal", "h":
-            return .success(.h)
-        case "vertical", "v":
-            return .success(.v)
-        case "auto", "":
-            return .success(nil)
-        default:
-            return .failure(.semantic(backtrace, "'\(str)' orientation isn't supported. Supported orientations: horizontal, vertical, auto"))
+            case "horizontal", "h":
+                return .success(.h)
+            case "vertical", "v":
+                return .success(.v)
+            case "auto", "":
+                return .success(nil)
+            default:
+                return .failure(.semantic(backtrace, "'\(str)' orientation isn't supported. Supported orientations: horizontal, vertical, auto"))
         }
     }
 }

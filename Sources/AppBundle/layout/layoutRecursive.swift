@@ -35,7 +35,7 @@ extension TreeNode {
                     } else {
                         lastAppliedLayoutPhysicalRect = physicalRect
                         window.isFullscreen = false
-                        
+
                         // Use animation for layout changes if enabled
                         if config.animation.enabled && config.animation.layoutChangeAnimationEnabled {
                             do {
@@ -93,7 +93,7 @@ extension Window {
                 x: moveTo.visibleRect.topLeftX + xProportion * moveTo.visibleRect.width,
                 y: moveTo.visibleRect.topLeftY + yProportion * moveTo.visibleRect.height,
             )
-            
+
             // Use animation for floating window movement if enabled
             if config.animation.enabled && config.animation.workspaceTransitionAnimationEnabled {
                 do {
@@ -117,12 +117,12 @@ extension Window {
         let monitorRect = noOuterGapsInFullscreen
             ? context.workspace.workspaceMonitor.visibleRect
             : context.workspace.workspaceMonitor.visibleRectPaddedByOuterGaps
-        
+
         // Use animation for fullscreen layout if enabled
         if config.animation.enabled && config.animation.layoutChangeAnimationEnabled {
             do {
-                let targetRect = Rect(topLeftX: monitorRect.topLeftX, topLeftY: monitorRect.topLeftY, 
-                                    width: monitorRect.width, height: monitorRect.height)
+                let targetRect = Rect(topLeftX: monitorRect.topLeftX, topLeftY: monitorRect.topLeftY,
+                                      width: monitorRect.width, height: monitorRect.height)
                 try await WindowAnimationEngine.shared.animateWindow(self, to: targetRect)
             } catch {
                 // Fallback to immediate positioning if animation fails

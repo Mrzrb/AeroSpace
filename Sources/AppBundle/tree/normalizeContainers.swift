@@ -35,7 +35,7 @@ extension TilingContainer {
                 unbindFromParent()
             }
         }
-        
+
         // Apply final BSP optimization after normalization
         if layout == .bsp && parent != nil {
             handleRootContainerChange()

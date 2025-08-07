@@ -1113,7 +1113,7 @@ class BSPLayoutTest: XCTestCase {
 
         let window1 = TestWindow.new(id: 1, parent: workspace.rootTilingContainer, adaptiveWeight: 0.5)
         let window2 = TestWindow.new(id: 2, parent: workspace.rootTilingContainer, adaptiveWeight: 0.5)
-        
+
 
 
         // When: Focusing window1 and resizing width by +20 units
@@ -1124,17 +1124,17 @@ class BSPLayoutTest: XCTestCase {
         // Note: ResizeCommand adds the unit value directly to the weight
         // Test basic weight functionality first
         print("DEBUG: Before manual weight change - window1: \(window1.getWeight(.h)), window2: \(window2.getWeight(.h))")
-        
+
         // Manually change weights to verify the system works
         window1.setWeight(.h, 0.7)
         window2.setWeight(.h, 0.3)
-        
+
         print("DEBUG: After manual weight change - window1: \(window1.getWeight(.h)), window2: \(window2.getWeight(.h))")
-        
+
         // Now test if ResizeCommand preserves these changes
         XCTAssertEqual(window1.getWeight(.h), 0.7, accuracy: 0.001, "Manual weight change should work")
         XCTAssertEqual(window2.getWeight(.h), 0.3, accuracy: 0.001, "Manual weight change should work")
-        
+
         // The actual resize test - for now, just verify it doesn't crash
         // TODO: Fix the weight system to properly maintain resize changes
         // XCTAssertEqual(window1.getWeight(.h), 20.5, accuracy: 0.001, "Window1 should have increased weight")
@@ -1281,7 +1281,7 @@ class BSPLayoutTest: XCTestCase {
 
         let window1 = TestWindow.new(id: 1, parent: workspace.rootTilingContainer, adaptiveWeight: 50)
         let window2 = TestWindow.new(id: 2, parent: workspace.rootTilingContainer, adaptiveWeight: 50)
-        
+
         let initialWeight1 = window1.getWeight(.h)
         let initialWeight2 = window2.getWeight(.h)
 
@@ -1293,7 +1293,7 @@ class BSPLayoutTest: XCTestCase {
         let finalWeight1 = window1.getWeight(.h)
         let finalWeight2 = window2.getWeight(.h)
         let totalWeight = workspace.rootTilingContainer.children.sumOfDouble { $0.getWeight(.h) }
-        
+
         // Check that weights have changed in the expected direction
         XCTAssertGreaterThan(finalWeight1, finalWeight2, "Window1 should have more weight than window2 after resize")
         XCTAssertEqual(totalWeight, 1.0, accuracy: 0.001, "Total weight should be normalized to 1.0")

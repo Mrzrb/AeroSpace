@@ -155,7 +155,7 @@ final class MacApp: AbstractApp {
             }
         }
     }
-    
+
     func setAxAlpha(_ windowId: UInt32, _ alpha: Double) {
         setFrameJobs.removeValue(forKey: windowId)?.cancel()
         setFrameJobs[windowId] = withWindowAsync(windowId) { [axApp] window, job in

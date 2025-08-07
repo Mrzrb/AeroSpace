@@ -18,7 +18,7 @@ final class TestWindow: Window, CustomStringConvertible {
         get { _rect }
         set { _rect = newValue }
     }
-    
+
     // Track alpha/opacity changes for testing
     var lastSetAlpha: Double?
     var lastSetFrame: Rect?
@@ -29,7 +29,7 @@ final class TestWindow: Window, CustomStringConvertible {
         _rect = rect
         super.init(id: id, TestApp.shared, lastFloatingSize: nil, parent: parent, adaptiveWeight: adaptiveWeight, index: INDEX_BIND_LAST)
     }
-    
+
     @MainActor
     init(id: UInt32, app: any AbstractApp, lastFloatingSize: CGSize?, parent: NonLeafTreeNodeObject, adaptiveWeight: CGFloat, index: Int) {
         _rect = nil
@@ -64,21 +64,21 @@ final class TestWindow: Window, CustomStringConvertible {
         }
         return mockRect ?? _rect
     }
-    
+
     @MainActor override func getAxSize() async throws -> CGSize? {
         if shouldFailGetAxRect {
             throw NSError(domain: "TestError", code: 1, userInfo: [NSLocalizedDescriptionKey: "Test failure"])
         }
         return _rect?.size
     }
-    
+
     @MainActor override func getAxTopLeftCorner() async throws -> CGPoint? {
         if shouldFailGetAxRect {
             throw NSError(domain: "TestError", code: 1, userInfo: [NSLocalizedDescriptionKey: "Test failure"])
         }
         return _rect?.topLeftCorner
     }
-    
+
     override func setAxTopLeftCorner(_ point: CGPoint) {
         if let currentRect = _rect {
             _rect = Rect(topLeftX: point.x, topLeftY: point.y, width: currentRect.width, height: currentRect.height)
@@ -86,7 +86,7 @@ final class TestWindow: Window, CustomStringConvertible {
             _rect = Rect(topLeftX: point.x, topLeftY: point.y, width: 400, height: 300)
         }
     }
-    
+
     override func setAxFrame(_ topLeft: CGPoint?, _ size: CGSize?) {
         let currentRect = _rect ?? Rect(topLeftX: 0, topLeftY: 0, width: 400, height: 300)
         let newTopLeft = topLeft ?? currentRect.topLeftCorner
@@ -94,12 +94,12 @@ final class TestWindow: Window, CustomStringConvertible {
         _rect = Rect(topLeftX: newTopLeft.x, topLeftY: newTopLeft.y, width: newSize.width, height: newSize.height)
         lastSetFrame = _rect
     }
-    
+
     @MainActor
     override func setAxFrameBlocking(_ topLeft: CGPoint?, _ size: CGSize?) async throws {
         setAxFrame(topLeft, size)
     }
-    
+
     override func setSizeAsync(_ size: CGSize) {
         if let currentRect = _rect {
             _rect = Rect(topLeftX: currentRect.topLeftX, topLeftY: currentRect.topLeftY, width: size.width, height: size.height)
@@ -107,32 +107,30 @@ final class TestWindow: Window, CustomStringConvertible {
             _rect = Rect(topLeftX: 0, topLeftY: 0, width: size.width, height: size.height)
         }
     }
-    
+
     // Animation bypass methods for immediate updates
     @MainActor
     override func setAxTopLeftCornerImmediate(_ point: CGPoint) {
         setAxTopLeftCorner(point)
     }
-    
+
     @MainActor
     override func setAxFrameImmediate(_ topLeft: CGPoint?, _ size: CGSize?) {
         setAxFrame(topLeft, size)
     }
-    
+
     @MainActor
     override func setAxAlphaImmediate(_ alpha: Double) {
         lastSetAlpha = alpha
     }
-    
+
     @MainActor
     override func setSizeAsyncImmediate(_ size: CGSize) {
         setSizeAsync(size)
     }
-    
+
     @MainActor
     func setTestRect(_ rect: Rect) {
         _rect = rect
     }
-    
-
 }

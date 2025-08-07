@@ -7,7 +7,7 @@ struct OptimizeBSPCommand: Command {
 
     func run(_ env: CmdEnv, _ io: CmdIo) -> Bool {
         let workspace: Workspace
-        
+
         if let workspaceName = args.workspaceName {
             workspace = Workspace.get(byName: workspaceName.raw)
         } else if let windowId = args.windowId {
@@ -22,20 +22,20 @@ struct OptimizeBSPCommand: Command {
             // Use focused workspace
             workspace = focus.workspace
         }
-        
+
         let rootContainer = workspace.rootTilingContainer
-        
+
         // Check if the workspace uses BSP layout
         guard rootContainer.layout == .bsp else {
             return io.err("Workspace '\(workspace.name)' is not using BSP layout")
         }
-        
+
         // Perform comprehensive BSP optimization
         rootContainer.handleRootContainerChange()
-        
+
         // Also optimize all child containers
         optimizeAllBSPContainers(in: rootContainer)
-        
+
         return true
     }
 }
@@ -45,7 +45,7 @@ struct OptimizeBSPCommand: Command {
     if container.layout == .bsp {
         container.handleRootContainerChange()
     }
-    
+
     for child in container.children {
         if let childContainer = child as? TilingContainer {
             optimizeAllBSPContainers(in: childContainer)

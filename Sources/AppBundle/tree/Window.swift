@@ -52,7 +52,7 @@ class Window: TreeNode, Hashable {
     func setAxFrameBlocking(_ topLeft: CGPoint?, _ size: CGSize?) async throws { die("Not implemented") }
     @MainActor func setAxFrame(_ topLeft: CGPoint?, _ size: CGSize?) { die("Not implemented") }
     @MainActor func setSizeAsync(_ size: CGSize) { die("Not implemented") }
-    
+
     // Animation bypass methods for immediate updates
     @MainActor func setAxTopLeftCornerImmediate(_ point: CGPoint) { die("Not implemented") }
     @MainActor func setAxFrameImmediate(_ topLeft: CGPoint?, _ size: CGSize?) { die("Not implemented") }

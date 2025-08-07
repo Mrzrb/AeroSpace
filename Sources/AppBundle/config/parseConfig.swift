@@ -439,13 +439,13 @@ private let animationConfigParser: [String: any ParserProtocol<AnimationConfig>]
 
 private func parseAnimationConfig(_ raw: TOMLValueConvertible, _ backtrace: TomlBacktrace, _ errors: inout [TomlParseError]) -> AnimationConfig {
     let config = parseTable(raw, AnimationConfig(), animationConfigParser, backtrace, &errors)
-    
+
     // Validate the configuration
     let validationErrors = config.validate()
     for error in validationErrors {
         errors.append(.semantic(backtrace, error))
     }
-    
+
     return config
 }
 

@@ -54,7 +54,7 @@ struct ResizeCommand: Command { // todo cover with tests
             .forEach { $0.setWeight(orientation, $0.getWeight(orientation) - childDiff) }
 
         node.setWeight(orientation, node.getWeight(orientation) + diff)
-        
+
         // For BSP layouts, normalize weights to sum to 1.0 after resize
         if parent.layout == .bsp {
             let totalWeight = parent.children.sumOfDouble { $0.getWeight(orientation) }
@@ -64,7 +64,7 @@ struct ResizeCommand: Command { // todo cover with tests
                 }
             }
         }
-        
+
         return true
     }
 }

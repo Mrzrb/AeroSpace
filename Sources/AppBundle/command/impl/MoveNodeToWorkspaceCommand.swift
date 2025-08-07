@@ -35,18 +35,18 @@ func moveWindowToWorkspace(_ window: Window, _ targetWorkspace: Workspace, _ io:
         io.err("Window '\(window.windowId)' already belongs to workspace '\(targetWorkspace.name)'. Tip: use --fail-if-noop to exit with non-zero code")
         return !failIfNoop
     }
-    
+
     let sourceWorkspace = window.nodeWorkspace
     let targetContainer: NonLeafTreeNodeObject = window.isFloating ? targetWorkspace : targetWorkspace.rootTilingContainer
-    
+
     // Check if animation is needed and possible
     let needsAnimation = config.animation.enabled && config.animation.workspaceTransitionAnimationEnabled
     let sourceVisible = sourceWorkspace?.isVisible == true
     let targetVisible = targetWorkspace.isVisible == true
-    
+
     // In test environment, disable animations to avoid timing issues
     let isTestEnvironment = NSClassFromString("XCTest") != nil
-    
+
     // Only use async animation for visible workspace transitions and not in test environment
     if needsAnimation && (sourceVisible || targetVisible) && !isTestEnvironment {
         Task {
@@ -65,16 +65,16 @@ func moveWindowToWorkspace(_ window: Window, _ targetWorkspace: Workspace, _ io:
                 else if sourceVisible && targetVisible {
                     // Save original binding data
                     let originalBinding = window.unbindFromParent()
-                    
+
                     // Temporarily bind to target to get target position
                     window.bind(to: targetContainer, adaptiveWeight: WEIGHT_AUTO, index: index)
-                    
+
                     // Get the new target rect after binding
                     if let targetRect = try await window.getAxRect() {
                         // Restore original binding to animate from original position
                         window.unbindFromParent()
                         window.bind(to: originalBinding.parent, adaptiveWeight: originalBinding.adaptiveWeight, index: originalBinding.index)
-                        
+
                         // Animate to target position, then rebind to final target
                         try await WindowAnimationEngine.shared.animateWorkspaceTransition(window, to: targetRect)
                         window.unbindFromParent()
@@ -96,6 +96,6 @@ func moveWindowToWorkspace(_ window: Window, _ targetWorkspace: Workspace, _ io:
         // No animation needed or animations disabled - bind immediately
         window.bind(to: targetContainer, adaptiveWeight: WEIGHT_AUTO, index: index)
     }
-    
+
     return focusFollowsWindow ? window.focusWindow() : true
 }

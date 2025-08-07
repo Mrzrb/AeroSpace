@@ -222,14 +222,14 @@ extension TilingContainer {
     @MainActor
     func intelligentBSPRebalance() {
         guard layout == .bsp && !children.isEmpty else { return }
-        
+
         // Skip rebalancing in test environment to preserve exact weights for testing
         let isTestEnvironment = NSClassFromString("XCTest") != nil
         guard !isTestEnvironment else { return }
 
         // Get current container dimensions for smart rebalancing
         let containerRect = lastAppliedLayoutVirtualRect ?? Rect(topLeftX: 0, topLeftY: 0, width: 1920, height: 1080)
-        
+
         // Apply different rebalancing strategies based on container characteristics
         if shouldUseAdaptiveRebalancing(containerRect: containerRect) {
             applyAdaptiveRebalancing(containerRect: containerRect)
@@ -250,7 +250,7 @@ extension TilingContainer {
         let aspectRatio = containerRect.width / containerRect.height
         let hasMultipleWindows = getAllWindows().count > 2
         let hasNestedContainers = children.contains { $0 is TilingContainer }
-        
+
         return hasMultipleWindows && (aspectRatio > 2.0 || aspectRatio < 0.5) && hasNestedContainers
     }
 
@@ -259,14 +259,14 @@ extension TilingContainer {
     private func applyAdaptiveRebalancing(containerRect: Rect) {
         let aspectRatio = containerRect.width / containerRect.height
         let windows = getAllWindows()
-        
+
         // Calculate optimal weights based on window count and aspect ratio
         let optimalWeights = calculateOptimalWeights(
             windowCount: windows.count,
             aspectRatio: aspectRatio,
-            orientation: orientation
+            orientation: orientation,
         )
-        
+
         // Apply calculated weights to children
         for (index, child) in children.enumerated() {
             if index < optimalWeights.count {
@@ -279,7 +279,7 @@ extension TilingContainer {
     @MainActor
     private func applyStandardRebalancing() {
         guard !children.isEmpty else { return }
-        
+
         let equalWeight = 1.0 / CGFloat(children.count)
         for child in children {
             child.setWeight(orientation, equalWeight)
@@ -290,21 +290,21 @@ extension TilingContainer {
     @MainActor
     private func calculateOptimalWeights(windowCount: Int, aspectRatio: CGFloat, orientation: Orientation) -> [CGFloat] {
         guard windowCount > 0 else { return [] }
-        
+
         var weights: [CGFloat] = []
-        
+
         // Base weight calculation
         let baseWeight = 1.0 / CGFloat(windowCount)
-        
+
         // Adjust weights based on orientation and aspect ratio
-        for i in 0..<windowCount {
+        for i in 0 ..< windowCount {
             var weight = baseWeight
-            
+
             // Give slightly more space to the first window (main window concept)
             if i == 0 && windowCount > 1 {
                 weight *= 1.1
             }
-            
+
             // Adjust based on aspect ratio and orientation
             if orientation == .h && aspectRatio > 1.5 {
                 // Wide container with horizontal split - give more space to center windows
@@ -315,16 +315,16 @@ extension TilingContainer {
                 let centerBonus = 1.0 - abs(CGFloat(i) - CGFloat(windowCount - 1) / 2.0) / CGFloat(windowCount) * 0.2
                 weight *= centerBonus
             }
-            
+
             weights.append(weight)
         }
-        
+
         // Normalize weights to sum to 1.0
         let totalWeight = weights.reduce(0, +)
         if totalWeight > 0 {
             weights = weights.map { $0 / totalWeight }
         }
-        
+
         return weights
     }
 
@@ -332,7 +332,7 @@ extension TilingContainer {
     @MainActor
     private func getAllWindows() -> [Window] {
         var windows: [Window] = []
-        
+
         for child in children {
             if let window = child as? Window {
                 windows.append(window)
@@ -340,7 +340,7 @@ extension TilingContainer {
                 windows.append(contentsOf: container.getAllWindows())
             }
         }
-        
+
         return windows
     }
 
@@ -351,19 +351,19 @@ extension TilingContainer {
     @MainActor
     func handleRootContainerChange() {
         guard layout == .bsp else { return }
-        
+
         // Step 1: Validate and fix any structural issues
         if !validateBSPTreeStructure() {
             // If validation fails, attempt to rebuild the tree structure
             rebuildBSPTreeStructure()
         }
-        
+
         // Step 2: Optimize the tree structure
         optimizeBSPTreeStructure()
-        
+
         // Step 3: Apply intelligent rebalancing
         intelligentBSPRebalance()
-        
+
         // Step 4: Ensure optimal split directions based on new structure
         optimizeSplitDirections()
     }
@@ -373,18 +373,18 @@ extension TilingContainer {
     private func rebuildBSPTreeStructure() {
         let allWindows = getAllWindows()
         guard allWindows.count > 1 else { return }
-        
+
         // Clear current structure (but keep windows)
         let windowData: [(Window, CGFloat)] = allWindows.map { window in
             let weight = window.getWeight(orientation)
             return (window, weight)
         }
-        
+
         // Unbind all windows
         for (window, _) in windowData {
             window.unbindFromParent()
         }
-        
+
         // Rebuild structure using optimal BSP algorithm
         rebuildOptimalBSPStructure(windows: windowData)
     }
@@ -393,33 +393,33 @@ extension TilingContainer {
     @MainActor
     private func rebuildOptimalBSPStructure(windows: [(Window, CGFloat)]) {
         guard !windows.isEmpty else { return }
-        
+
         if windows.count == 1 {
             // Single window - bind directly
             let (window, weight) = windows[0]
             window.bind(to: self, adaptiveWeight: weight, index: 0)
             return
         }
-        
+
         // For multiple windows, use recursive BSP partitioning
         let containerRect = lastAppliedLayoutVirtualRect ?? Rect(topLeftX: 0, topLeftY: 0, width: 1920, height: 1080)
         let optimalOrientation = chooseBSPSplitDirection(width: containerRect.width, height: containerRect.height)
-        
+
         // Update orientation if needed
         if orientation != optimalOrientation {
             _orientation = optimalOrientation
         }
-        
+
         // Split windows into two groups for binary partitioning
         let midPoint = windows.count / 2
-        let leftWindows = Array(windows[0..<midPoint])
+        let leftWindows = Array(windows[0 ..< midPoint])
         let rightWindows = Array(windows[midPoint...])
-        
+
         if leftWindows.count == 1 && rightWindows.count == 1 {
             // Both sides have single windows - bind directly
             let (leftWindow, leftWeight) = leftWindows[0]
             let (rightWindow, rightWeight) = rightWindows[0]
-            
+
             leftWindow.bind(to: self, adaptiveWeight: leftWeight, index: 0)
             rightWindow.bind(to: self, adaptiveWeight: rightWeight, index: 1)
         } else {
@@ -433,7 +433,7 @@ extension TilingContainer {
     private func createOptimalSubContainers(leftWindows: [(Window, CGFloat)], rightWindows: [(Window, CGFloat)]) {
         let leftWeight = leftWindows.map { $0.1 }.reduce(0, +) / CGFloat(leftWindows.count + rightWindows.count)
         let rightWeight = rightWindows.map { $0.1 }.reduce(0, +) / CGFloat(leftWindows.count + rightWindows.count)
-        
+
         // Create left container if needed
         if leftWindows.count == 1 {
             let (window, _) = leftWindows[0]
@@ -444,11 +444,11 @@ extension TilingContainer {
                 adaptiveWeight: leftWeight,
                 orientation.opposite,
                 .bsp,
-                index: 0
+                index: 0,
             )
             leftContainer.rebuildOptimalBSPStructure(windows: leftWindows)
         }
-        
+
         // Create right container if needed
         if rightWindows.count == 1 {
             let (window, _) = rightWindows[0]
@@ -459,7 +459,7 @@ extension TilingContainer {
                 adaptiveWeight: rightWeight,
                 orientation.opposite,
                 .bsp,
-                index: 1
+                index: 1,
             )
             rightContainer.rebuildOptimalBSPStructure(windows: rightWindows)
         }
@@ -469,15 +469,15 @@ extension TilingContainer {
     @MainActor
     private func optimizeSplitDirections() {
         guard layout == .bsp else { return }
-        
+
         let containerRect = lastAppliedLayoutVirtualRect ?? Rect(topLeftX: 0, topLeftY: 0, width: 1920, height: 1080)
         let optimalOrientation = chooseBSPSplitDirection(width: containerRect.width, height: containerRect.height)
-        
+
         // Update orientation if it would improve the layout
         if shouldUpdateOrientation(to: optimalOrientation, currentRect: containerRect) {
             _orientation = optimalOrientation
         }
-        
+
         // Recursively optimize child containers
         for child in children {
             (child as? TilingContainer)?.optimizeSplitDirections()
@@ -491,24 +491,24 @@ extension TilingContainer {
         guard validateBSPSplitSize(
             containerWidth: currentRect.width,
             containerHeight: currentRect.height,
-            splitDirection: newOrientation
+            splitDirection: newOrientation,
         ) else {
             return false
         }
-        
+
         // Change orientation if the new one is significantly better
         let currentAspectRatio = currentRect.width / currentRect.height
         let threshold = config.bsp.autoSplitThreshold
-        
+
         switch (orientation, newOrientation) {
-        case (.h, .v):
-            // Switch from horizontal to vertical if width is much larger than height
-            return currentAspectRatio > threshold * 1.5
-        case (.v, .h):
-            // Switch from vertical to horizontal if height is much larger than width
-            return currentAspectRatio < (1.0 / threshold) * 0.67
-        default:
-            return false
+            case (.h, .v):
+                // Switch from horizontal to vertical if width is much larger than height
+                return currentAspectRatio > threshold * 1.5
+            case (.v, .h):
+                // Switch from vertical to horizontal if height is much larger than width
+                return currentAspectRatio < (1.0 / threshold) * 0.67
+            default:
+                return false
         }
     }
 

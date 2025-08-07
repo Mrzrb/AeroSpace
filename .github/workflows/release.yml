@@ -20,7 +20,7 @@ jobs:
         run: env
         
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
       
@@ -58,7 +58,11 @@ jobs:
       
       # 运行测试
       - name: Run tests
-        run: ./run-tests.sh
+        run: |
+          set -e
+          echo "Running tests..."
+          ./run-tests.sh
+          echo "All tests passed"
       
       # 构建发布版本（仅在 macos-15 上构建，参考成功的 build.yml）
       - name: Build release artifacts
