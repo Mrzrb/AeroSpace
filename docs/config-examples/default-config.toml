@@ -78,6 +78,34 @@ automatically-unhide-macos-hidden-apps = false
     # 'vertical' always splits vertically (new window to the right)
     preferred-split-direction = 'auto'
 
+# Window animation configuration
+# Provides smooth animations for window movements, resizing, and workspace transitions
+# See: https://nikitabobko.github.io/AeroSpace/guide#animations
+[animations]
+    # Master switch to enable/disable all animations
+    enabled = true
+    
+    # Default animation duration in seconds (0.01 to 2.0)
+    default-duration = 0.25
+    
+    # Animation easing function
+    # Possible values: 'linear', 'ease-in', 'ease-out', 'ease-in-out'
+    easing-function = 'ease-out'
+    
+    # Respect system accessibility preferences (e.g., "Reduce Motion")
+    respect-system-preferences = true
+    
+    # Per-operation animation settings
+    move-animation-enabled = true
+    resize-animation-enabled = true
+    layout-change-animation-enabled = true
+    workspace-transition-animation-enabled = true
+    
+    # Performance settings
+    max-concurrent-animations = 10
+    adaptive-quality = true
+    min-frame-rate = 30.0
+
 # 'main' binding mode declaration
 # See: https://nikitabobko.github.io/AeroSpace/guide#binding-modes
 # 'main' binding mode must be always presented
