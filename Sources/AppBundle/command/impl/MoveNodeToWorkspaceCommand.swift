@@ -34,7 +34,57 @@ func moveWindowToWorkspace(_ window: Window, _ targetWorkspace: Workspace, _ io:
         io.err("Window '\(window.windowId)' already belongs to workspace '\(targetWorkspace.name)'. Tip: use --fail-if-noop to exit with non-zero code")
         return !failIfNoop
     }
+    
+    let sourceWorkspace = window.nodeWorkspace
     let targetContainer: NonLeafTreeNodeObject = window.isFloating ? targetWorkspace : targetWorkspace.rootTilingContainer
-    window.bind(to: targetContainer, adaptiveWeight: WEIGHT_AUTO, index: index)
+    
+    // Handle workspace transition animations
+    if config.animation.enabled && config.animation.workspaceTransitionAnimationEnabled {
+        Task {
+            do {
+                // If moving from visible workspace to hidden workspace, fade out
+                if sourceWorkspace?.isVisible == true && targetWorkspace.isVisible == false {
+                    try await WindowAnimationEngine.shared.animateWindowFadeOut(window)
+                }
+                // If moving from hidden workspace to visible workspace, fade in
+                else if sourceWorkspace?.isVisible == false && targetWorkspace.isVisible == true {
+                    try await WindowAnimationEngine.shared.animateWindowFadeIn(window)
+                }
+                // If both workspaces are visible (different monitors), use position transition
+                else if sourceWorkspace?.isVisible == true && targetWorkspace.isVisible == true {
+                    // Save original binding data
+                    let originalBinding = window.unbindFromParent()
+                    
+                    // Temporarily bind to target to get target position
+                    window.bind(to: targetContainer, adaptiveWeight: WEIGHT_AUTO, index: index)
+                    
+                    // Get the new target rect after binding
+                    if let targetRect = try await window.getAxRect() {
+                        // Restore original binding to animate from original position
+                        window.unbindFromParent()
+                        window.bind(to: originalBinding.parent, adaptiveWeight: originalBinding.adaptiveWeight, index: originalBinding.index)
+                        
+                        // Animate to target position, then rebind to final target
+                        try await WindowAnimationEngine.shared.animateWorkspaceTransition(window, to: targetRect)
+                        window.unbindFromParent()
+                        window.bind(to: targetContainer, adaptiveWeight: WEIGHT_AUTO, index: index)
+                    } else {
+                        // Fallback to immediate binding if we can't get target rect
+                        // Already bound to target, so no need to rebind
+                    }
+                } else {
+                    // No animation needed for hidden-to-hidden transitions
+                    window.bind(to: targetContainer, adaptiveWeight: WEIGHT_AUTO, index: index)
+                }
+            } catch {
+                // Fallback to immediate binding if animation fails
+                window.bind(to: targetContainer, adaptiveWeight: WEIGHT_AUTO, index: index)
+            }
+        }
+    } else {
+        // No animation, bind immediately
+        window.bind(to: targetContainer, adaptiveWeight: WEIGHT_AUTO, index: index)
+    }
+    
     return focusFollowsWindow ? window.focusWindow() : true
 }

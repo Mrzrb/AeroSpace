@@ -81,47 +81,47 @@
   - Write tests for tiles and accordion layout animations
   - _Requirements: 5.2, 5.3, 1.1, 2.1, 2.2_
 
-- [ ] 4. Implement workspace transition animations
+- [x] 4. Implement workspace transition animations
   - Add animation support for window movements between workspaces
   - Create visual feedback for workspace transitions
   - Implement fade-out/fade-in effects for workspace changes
   - _Requirements: 1.2, 5.4_
 
-- [ ] 4.1 Create workspace transition visual effects
+- [x] 4.1 Create workspace transition visual effects
   - Implement window fade-out animation when moving to hidden workspace
   - Add window fade-in animation when workspace becomes visible
   - Create smooth position transitions for workspace-to-workspace moves
   - Write tests for workspace transition animations
   - _Requirements: 1.2, 5.4_
 
-- [ ] 4.2 Handle floating window animations
+- [x] 4.2 Handle floating window animations
   - Implement smooth animations for floating window movements
   - Add resize animations for floating windows
   - Ensure floating window animations work across different monitors
   - Write tests for floating window animation scenarios
   - _Requirements: 5.4, 1.1, 2.1_
 
-- [ ] 5. Add configuration integration and runtime updates
+- [x] 5. Add configuration integration and runtime updates
   - Integrate animation configuration with TOML config parsing
   - Implement runtime configuration updates without restart
   - Add configuration validation and error handling
   - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5_
 
-- [ ] 5.1 Implement TOML configuration parsing for animations
+- [x] 5.1 Implement TOML configuration parsing for animations
   - Add animation configuration section to TOML parser
   - Create configuration validation with sensible defaults
   - Add support for per-operation animation settings
   - Write tests for configuration parsing and validation
   - _Requirements: 3.1, 3.2, 3.3, 3.4_
 
-- [ ] 5.2 Add accessibility integration
+- [x] 5.2 Add accessibility integration
   - Implement system motion preference detection and respect
   - Add automatic animation disabling based on accessibility settings
   - Create accessibility-friendly animation alternatives
   - Write tests for accessibility integration
   - _Requirements: 4.4, 3.5_
 
-- [ ] 5.3 Create runtime configuration update system
+- [x] 5.3 Create runtime configuration update system
   - Implement live configuration updates without application restart
   - Add configuration change notification system
   - Create smooth transitions when animation settings change

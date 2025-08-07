@@ -18,6 +18,11 @@ final class TestWindow: Window, CustomStringConvertible {
         get { _rect }
         set { _rect = newValue }
     }
+    
+    // Track alpha/opacity changes for testing
+    var lastSetAlpha: Double?
+    var lastSetFrame: Rect?
+    var mockRect: Rect?
 
     @MainActor
     private init(_ id: UInt32, _ parent: NonLeafTreeNodeObject, _ adaptiveWeight: CGFloat, _ rect: Rect?) {
@@ -57,7 +62,7 @@ final class TestWindow: Window, CustomStringConvertible {
         if shouldFailGetAxRect {
             throw NSError(domain: "TestError", code: 1, userInfo: [NSLocalizedDescriptionKey: "Test failure"])
         }
-        return _rect
+        return mockRect ?? _rect
     }
     
     @MainActor override func getAxSize() async throws -> CGSize? {
@@ -87,6 +92,7 @@ final class TestWindow: Window, CustomStringConvertible {
         let newTopLeft = topLeft ?? currentRect.topLeftCorner
         let newSize = size ?? currentRect.size
         _rect = Rect(topLeftX: newTopLeft.x, topLeftY: newTopLeft.y, width: newSize.width, height: newSize.height)
+        lastSetFrame = _rect
     }
     
     @MainActor
@@ -111,6 +117,11 @@ final class TestWindow: Window, CustomStringConvertible {
     @MainActor
     override func setAxFrameImmediate(_ topLeft: CGPoint?, _ size: CGSize?) {
         setAxFrame(topLeft, size)
+    }
+    
+    @MainActor
+    override func setAxAlphaImmediate(_ alpha: Double) {
+        lastSetAlpha = alpha
     }
     
     @MainActor

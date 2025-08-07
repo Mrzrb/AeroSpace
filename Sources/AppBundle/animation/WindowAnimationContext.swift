@@ -8,6 +8,8 @@ enum AnimationType {
     case moveAndResize
     case layoutTransition
     case workspaceTransition
+    case workspaceTransitionFadeOut
+    case workspaceTransitionFadeIn
 }
 
 /// Tracks animation state for individual windows
@@ -24,6 +26,10 @@ class WindowAnimationContext {
     
     let sourceRect: Rect
     let targetRect: Rect
+    
+    // Opacity animation support
+    let sourceOpacity: Double?
+    let targetOpacity: Double?
     
     private var _isComplete: Bool = false
     private var _isCancelled: Bool = false
@@ -74,7 +80,9 @@ class WindowAnimationContext {
         targetRect: Rect,
         duration: TimeInterval,
         easingFunction: AnimationEasing = .easeOut,
-        startTime: Date = Date()
+        startTime: Date = Date(),
+        sourceOpacity: Double? = nil,
+        targetOpacity: Double? = nil
     ) {
         self.windowId = windowId
         self.animationType = animationType
@@ -83,6 +91,8 @@ class WindowAnimationContext {
         self.duration = duration
         self.easingFunction = easingFunction
         self.startTime = startTime
+        self.sourceOpacity = sourceOpacity
+        self.targetOpacity = targetOpacity
     }
     
     // MARK: - Animation Lifecycle Methods
@@ -154,6 +164,25 @@ class WindowAnimationContext {
     func getCurrentSize() -> CGSize {
         let currentRect = getCurrentRect()
         return CGSize(width: currentRect.width, height: currentRect.height)
+    }
+    
+    /// Get the current interpolated opacity (if opacity animation is enabled)
+    func getCurrentOpacity() -> Double? {
+        guard let sourceOpacity = sourceOpacity, let targetOpacity = targetOpacity else {
+            return nil
+        }
+        
+        if _isCancelled {
+            return sourceOpacity
+        }
+        
+        if isComplete {
+            return targetOpacity
+        }
+        
+        let rawProgress = currentProgress
+        let easedProgress = AnimationInterpolator.applyEasing(rawProgress, easing: easingFunction)
+        return AnimationInterpolator.interpolateDouble(sourceOpacity, targetOpacity, progress: easedProgress)
     }
     
     // MARK: - Utility Methods

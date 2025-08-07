@@ -304,6 +304,12 @@ final class MacWindow: Window {
     override func setSizeAsyncImmediate(_ size: CGSize) {
         macApp.setAxSize(windowId, size)
     }
+    
+    /// Set window alpha/opacity immediately without animation (for workspace transition effects)
+    @MainActor
+    override func setAxAlphaImmediate(_ alpha: Double) {
+        macApp.setAxAlpha(windowId, alpha)
+    }
 
     override func getAxTopLeftCorner() async throws -> CGPoint? {
         try await macApp.getAxTopLeftCorner(windowId)

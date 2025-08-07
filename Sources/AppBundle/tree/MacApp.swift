@@ -155,6 +155,15 @@ final class MacApp: AbstractApp {
             }
         }
     }
+    
+    func setAxAlpha(_ windowId: UInt32, _ alpha: Double) {
+        setFrameJobs.removeValue(forKey: windowId)?.cancel()
+        setFrameJobs[windowId] = withWindowAsync(windowId) { [axApp] window, job in
+            disableAnimations(app: axApp.threadGuarded) {
+                _ = window.set(Ax.alphaAttr, alpha)
+            }
+        }
+    }
 
     @MainActor // todo swift is stupid
     func getAxWindowsCount() async throws -> Int? {

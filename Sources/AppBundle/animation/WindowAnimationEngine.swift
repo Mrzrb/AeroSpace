@@ -1,5 +1,11 @@
 import Foundation
+import AppKit
 import Common
+
+/// Notification posted when animation configuration changes
+extension Notification.Name {
+    static let animationConfigurationDidChange = Notification.Name("animationConfigurationDidChange")
+}
 
 /// Central coordinator for all window animations
 @MainActor
@@ -24,13 +30,21 @@ class WindowAnimationEngine {
     private var lastPerformanceCheck: Date = Date()
     private let performanceCheckInterval: TimeInterval = 1.0 // Check every second
     
+    // Accessibility integration
+    private var originalConfigEnabled: Bool = true // Track original enabled state
+    
     // MARK: - Singleton
     
     static let shared = WindowAnimationEngine()
     
     private init() {
         self.config = AnimationConfig.default
+        self.originalConfigEnabled = AnimationConfig.default.enabled
         setupSystemPreferencesObserver()
+    }
+    
+    deinit {
+        NotificationCenter.default.removeObserver(self)
     }
     
     // MARK: - Configuration
@@ -43,6 +57,16 @@ class WindowAnimationEngine {
             return
         }
         
+        let oldConfig = self.config
+        
+        // Track original enabled state for accessibility restoration
+        if config.respectSystemPreferences {
+            originalConfigEnabled = newConfig.enabled
+        }
+        
+        // Handle smooth transition between configurations
+        handleConfigurationTransition(from: oldConfig, to: newConfig)
+        
         self.config = newConfig
         
         // If animations are disabled, cancel all active animations
@@ -52,6 +76,18 @@ class WindowAnimationEngine {
         
         // Update timer interval if needed
         updateTimerIfNeeded()
+        
+        // Re-check system preferences after config update
+        if newConfig.respectSystemPreferences {
+            checkSystemMotionPreferences()
+        }
+        
+        // Post notification about configuration change
+        NotificationCenter.default.post(
+            name: .animationConfigurationDidChange,
+            object: self,
+            userInfo: ["oldConfig": oldConfig, "newConfig": newConfig]
+        )
     }
     
     /// Get current configuration
@@ -72,6 +108,11 @@ class WindowAnimationEngine {
             // If animations are disabled, apply immediately
             window.setAxFrameImmediate(CGPoint(x: targetRect.topLeftX, y: targetRect.topLeftY), 
                                      CGSize(width: targetRect.width, height: targetRect.height))
+            
+            // Provide accessibility feedback if needed
+            if shouldUseAccessibilityAlternatives() {
+                provideAccessibilityFeedback(for: window, operation: "move and resize")
+            }
             return
         }
         
@@ -118,6 +159,11 @@ class WindowAnimationEngine {
     ) async throws {
         guard config.enabled && config.moveAnimationEnabled else {
             window.setAxTopLeftCornerImmediate(targetPosition)
+            
+            // Provide accessibility feedback if needed
+            if shouldUseAccessibilityAlternatives() {
+                provideAccessibilityFeedback(for: window, operation: "move")
+            }
             return
         }
         
@@ -144,6 +190,11 @@ class WindowAnimationEngine {
     ) async throws {
         guard config.enabled && config.resizeAnimationEnabled else {
             window.setSizeAsyncImmediate(targetSize)
+            
+            // Provide accessibility feedback if needed
+            if shouldUseAccessibilityAlternatives() {
+                provideAccessibilityFeedback(for: window, operation: "resize")
+            }
             return
         }
         
@@ -159,6 +210,150 @@ class WindowAnimationEngine {
         )
         
         try await animateWindow(window, to: targetRect, duration: duration, easing: easing)
+    }
+    
+    // MARK: - Workspace Transition Animations
+    
+    /// Animate window fade-out when moving to hidden workspace
+    func animateWindowFadeOut(
+        _ window: Window,
+        duration: TimeInterval? = nil,
+        easing: AnimationEasing? = nil
+    ) async throws {
+        guard config.enabled && config.workspaceTransitionAnimationEnabled else {
+            // If animations are disabled, hide immediately
+            window.setAxAlphaImmediate(0.0)
+            return
+        }
+        
+        guard let currentRect = try await window.getAxRect() else {
+            throw AnimationError.windowNotFound(window.windowId)
+        }
+        
+        let animationDuration = duration ?? config.defaultDuration
+        let animationEasing = easing ?? config.easingFunction
+        
+        // Cancel any existing animation for this window
+        cancelAnimation(for: window)
+        
+        // Check if we're at max concurrent animations
+        if activeAnimations.count >= config.maxConcurrentAnimations {
+            // Apply immediately if we're at the limit
+            window.setAxAlphaImmediate(0.0)
+            return
+        }
+        
+        // Create fade-out animation context
+        let animationContext = WindowAnimationContext(
+            windowId: window.windowId,
+            animationType: .workspaceTransitionFadeOut,
+            sourceRect: currentRect,
+            targetRect: currentRect, // Position doesn't change during fade
+            duration: animationDuration,
+            easingFunction: animationEasing,
+            sourceOpacity: 1.0,
+            targetOpacity: 0.0
+        )
+        
+        activeAnimations[window.windowId] = animationContext
+        
+        // Start timer if not already running
+        startTimerIfNeeded()
+    }
+    
+    /// Animate window fade-in when workspace becomes visible
+    func animateWindowFadeIn(
+        _ window: Window,
+        duration: TimeInterval? = nil,
+        easing: AnimationEasing? = nil
+    ) async throws {
+        guard config.enabled && config.workspaceTransitionAnimationEnabled else {
+            // If animations are disabled, show immediately
+            window.setAxAlphaImmediate(1.0)
+            return
+        }
+        
+        guard let currentRect = try await window.getAxRect() else {
+            throw AnimationError.windowNotFound(window.windowId)
+        }
+        
+        let animationDuration = duration ?? config.defaultDuration
+        let animationEasing = easing ?? config.easingFunction
+        
+        // Cancel any existing animation for this window
+        cancelAnimation(for: window)
+        
+        // Check if we're at max concurrent animations
+        if activeAnimations.count >= config.maxConcurrentAnimations {
+            // Apply immediately if we're at the limit
+            window.setAxAlphaImmediate(1.0)
+            return
+        }
+        
+        // Create fade-in animation context
+        let animationContext = WindowAnimationContext(
+            windowId: window.windowId,
+            animationType: .workspaceTransitionFadeIn,
+            sourceRect: currentRect,
+            targetRect: currentRect, // Position doesn't change during fade
+            duration: animationDuration,
+            easingFunction: animationEasing,
+            sourceOpacity: 0.0,
+            targetOpacity: 1.0
+        )
+        
+        activeAnimations[window.windowId] = animationContext
+        
+        // Start timer if not already running
+        startTimerIfNeeded()
+    }
+    
+    /// Animate window position transition during workspace-to-workspace moves
+    func animateWorkspaceTransition(
+        _ window: Window,
+        to targetRect: Rect,
+        duration: TimeInterval? = nil,
+        easing: AnimationEasing? = nil
+    ) async throws {
+        guard config.enabled && config.workspaceTransitionAnimationEnabled else {
+            // If animations are disabled, apply immediately
+            window.setAxFrameImmediate(CGPoint(x: targetRect.topLeftX, y: targetRect.topLeftY), 
+                                     CGSize(width: targetRect.width, height: targetRect.height))
+            return
+        }
+        
+        guard let currentRect = try await window.getAxRect() else {
+            throw AnimationError.windowNotFound(window.windowId)
+        }
+        
+        let animationDuration = duration ?? config.defaultDuration
+        let animationEasing = easing ?? config.easingFunction
+        
+        // Cancel any existing animation for this window
+        cancelAnimation(for: window)
+        
+        // Check if we're at max concurrent animations
+        if activeAnimations.count >= config.maxConcurrentAnimations {
+            // Apply immediately if we're at the limit
+            window.setAxFrameImmediate(CGPoint(x: targetRect.topLeftX, y: targetRect.topLeftY),
+                                     CGSize(width: targetRect.width, height: targetRect.height))
+            return
+        }
+        
+        // Create workspace transition animation context
+        let animationContext = WindowAnimationContext(
+            windowId: window.windowId,
+            animationType: .workspaceTransition,
+            sourceRect: currentRect,
+            targetRect: targetRect,
+            duration: animationDuration,
+            easingFunction: animationEasing
+        )
+        
+        activeAnimations[window.windowId] = animationContext
+        
+        // Start timer if not already running
+        startTimerIfNeeded()
     }
     
     // MARK: - Animation Control
@@ -298,6 +493,11 @@ class WindowAnimationEngine {
                     CGPoint(x: currentRect.topLeftX, y: currentRect.topLeftY),
                     CGSize(width: currentRect.width, height: currentRect.height)
                 )
+                
+                // Apply opacity animation if present
+                if let currentOpacity = context.getCurrentOpacity() {
+                    window.setAxAlphaImmediate(currentOpacity)
+                }
             } else {
                 // Animation is complete or cancelled
                 if context.isComplete {
@@ -307,6 +507,12 @@ class WindowAnimationEngine {
                         CGPoint(x: finalRect.topLeftX, y: finalRect.topLeftY),
                         CGSize(width: finalRect.width, height: finalRect.height)
                     )
+                    
+                    // Ensure final opacity is set if opacity animation was used
+                    if let targetOpacity = context.targetOpacity {
+                        window.setAxAlphaImmediate(targetOpacity)
+                    }
+                    
                     totalAnimationsCompleted += 1
                 }
                 completedAnimations.append(windowId)
@@ -414,22 +620,117 @@ class WindowAnimationEngine {
     private func setupSystemPreferencesObserver() {
         // Monitor system accessibility preferences for reduced motion
         if config.respectSystemPreferences {
-            // This would typically observe NSWorkspace or other system notifications
-            // For now, we'll implement a basic check
             checkSystemMotionPreferences()
+            
+            // Set up notification observer for accessibility preference changes
+            NotificationCenter.default.addObserver(
+                forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor in
+                    self?.checkSystemMotionPreferences()
+                }
+            }
         }
     }
     
     private func checkSystemMotionPreferences() {
         // Check if system has reduced motion enabled
-        // This is a placeholder - actual implementation would check system preferences
-        let reducedMotionEnabled = false // UserDefaults.standard.bool(forKey: "reduceMotion")
+        let reducedMotionEnabled = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         
         if reducedMotionEnabled && config.respectSystemPreferences {
-            var updatedConfig = config
-            updatedConfig.enabled = false
-            updateConfiguration(updatedConfig)
+            // Disable animations when system prefers reduced motion
+            if config.enabled {
+                var updatedConfig = config
+                updatedConfig.enabled = false
+                // Temporarily update config without triggering recursive call
+                self.config = updatedConfig
+                cancelAllAnimations()
+            }
+        } else if !reducedMotionEnabled && config.respectSystemPreferences {
+            // Re-enable animations if they were disabled due to system preferences
+            // but only if the original config had them enabled
+            if originalConfigEnabled && !config.enabled {
+                var updatedConfig = config
+                updatedConfig.enabled = true
+                // Temporarily update config without triggering recursive call
+                self.config = updatedConfig
+            }
         }
+    }
+    
+    // MARK: - Configuration Transitions
+    
+    /// Handle smooth transitions when animation settings change
+    private func handleConfigurationTransition(from oldConfig: AnimationConfig, to newConfig: AnimationConfig) {
+        // If animations were enabled but are now disabled, cancel all active animations
+        if oldConfig.enabled && !newConfig.enabled {
+            cancelAllAnimations()
+        }
+        
+        // If animation duration changed significantly, adjust active animations
+        if abs(oldConfig.defaultDuration - newConfig.defaultDuration) > 0.1 {
+            adjustActiveAnimationDurations(newDuration: newConfig.defaultDuration)
+        }
+        
+        // If easing function changed, we could potentially update active animations
+        // For now, we'll let them complete with their original easing
+        
+        // If performance settings changed, update monitoring
+        if oldConfig.maxConcurrentAnimations != newConfig.maxConcurrentAnimations ||
+           oldConfig.minFrameRate != newConfig.minFrameRate {
+            updatePerformanceSettings()
+        }
+    }
+    
+    /// Adjust the duration of active animations when configuration changes
+    private func adjustActiveAnimationDurations(newDuration: TimeInterval) {
+        for (_, context) in activeAnimations {
+            // Calculate how much of the animation has completed
+            let elapsed = Date().timeIntervalSince(context.startTime)
+            let progress = elapsed / context.duration
+            
+            // If the animation is less than 50% complete, adjust its duration
+            if progress < 0.5 {
+                let remainingProgress = 1.0 - progress
+                let newRemainingDuration = newDuration * remainingProgress
+                
+                // Update the context with new timing
+                // Note: This would require making WindowAnimationContext mutable
+                // For now, we'll let existing animations complete with their original duration
+            }
+        }
+    }
+    
+    /// Update performance monitoring settings
+    private func updatePerformanceSettings() {
+        // Reset performance history when settings change
+        frameRateHistory.removeAll()
+        performanceThresholdExceeded = false
+        lastPerformanceCheck = Date()
+    }
+    
+    // MARK: - Accessibility Alternatives
+    
+    /// Provide accessibility-friendly feedback when animations are disabled
+    private func provideAccessibilityFeedback(for window: Window, operation: String) {
+        // When animations are disabled due to accessibility preferences,
+        // we can provide alternative feedback mechanisms
+        
+        // For now, this is a placeholder for potential future enhancements like:
+        // - Audio feedback
+        // - Haptic feedback (if available)
+        // - Visual indicators that don't involve motion
+        // - Screen reader announcements
+        
+        // Example: Could announce window movements to screen readers
+        // NSAccessibility.post(element: window.axWindow, notification: .moved)
+    }
+    
+    /// Check if accessibility alternatives should be used
+    private func shouldUseAccessibilityAlternatives() -> Bool {
+        return !config.enabled && config.respectSystemPreferences && NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
     }
     
     // MARK: - Debugging
@@ -452,5 +753,10 @@ class WindowAnimationEngine {
         }
         
         return info
+    }
+    
+    /// Get active animation context for a window (for testing)
+    func getActiveAnimationContext(for window: Window) -> WindowAnimationContext? {
+        return activeAnimations[window.windowId]
     }
 }

@@ -57,6 +57,7 @@ class Window: TreeNode, Hashable {
     @MainActor func setAxTopLeftCornerImmediate(_ point: CGPoint) { die("Not implemented") }
     @MainActor func setAxFrameImmediate(_ topLeft: CGPoint?, _ size: CGSize?) { die("Not implemented") }
     @MainActor func setSizeAsyncImmediate(_ size: CGSize) { die("Not implemented") }
+    @MainActor func setAxAlphaImmediate(_ alpha: Double) { die("Not implemented") }
 }
 
 enum LayoutReason: Equatable {

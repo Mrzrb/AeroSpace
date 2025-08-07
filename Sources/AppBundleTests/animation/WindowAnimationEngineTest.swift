@@ -39,7 +39,9 @@ final class WindowAnimationEngineTest: XCTestCase {
     
     func testAnimateWindow() async throws {
         let engine = WindowAnimationEngine.shared
-        engine.updateConfiguration(AnimationConfig.default)
+        var config = AnimationConfig.default
+        config.respectSystemPreferences = false // Disable system preference checking for tests
+        engine.updateConfiguration(config)
         
         let testWindow = TestWindow.new(id: 1, parent: Workspace.get(byName: "test").rootTilingContainer)
         let sourceRect = Rect(topLeftX: 0, topLeftY: 0, width: 100, height: 100)
@@ -55,7 +57,9 @@ final class WindowAnimationEngineTest: XCTestCase {
     
     func testCancelAnimation() async throws {
         let engine = WindowAnimationEngine.shared
-        engine.updateConfiguration(AnimationConfig.default)
+        var config = AnimationConfig.default
+        config.respectSystemPreferences = false // Disable system preference checking for tests
+        engine.updateConfiguration(config)
         
         let testWindow = TestWindow.new(id: 2, parent: Workspace.get(byName: "test").rootTilingContainer)
         let sourceRect = Rect(topLeftX: 0, topLeftY: 0, width: 100, height: 100)
@@ -83,6 +87,7 @@ final class WindowAnimationEngineTest: XCTestCase {
         // Reset to enabled for other tests
         var enabledConfig = AnimationConfig.default
         enabledConfig.enabled = true
+        enabledConfig.respectSystemPreferences = false
         engine.updateConfiguration(enabledConfig)
     }
     
@@ -133,7 +138,9 @@ final class WindowAnimationEngineTest: XCTestCase {
     
     func testConcurrentAnimations() async throws {
         let engine = WindowAnimationEngine.shared
-        engine.updateConfiguration(AnimationConfig.default)
+        var config = AnimationConfig.default
+        config.respectSystemPreferences = false // Disable system preference checking for tests
+        engine.updateConfiguration(config)
         
         // Create multiple test windows
         let testWindow1 = TestWindow.new(id: 10, parent: Workspace.get(byName: "test").rootTilingContainer)
@@ -161,7 +168,9 @@ final class WindowAnimationEngineTest: XCTestCase {
     
     func testAnimationConflictResolution() async throws {
         let engine = WindowAnimationEngine.shared
-        engine.updateConfiguration(AnimationConfig.default)
+        var config = AnimationConfig.default
+        config.respectSystemPreferences = false // Disable system preference checking for tests
+        engine.updateConfiguration(config)
         
         let testWindow = TestWindow.new(id: 20, parent: Workspace.get(byName: "test").rootTilingContainer)
         let sourceRect = Rect(topLeftX: 0, topLeftY: 0, width: 100, height: 100)
@@ -193,12 +202,15 @@ final class WindowAnimationEngineTest: XCTestCase {
         
         // Reset to default for other tests
         var defaultConfig = AnimationConfig.default
+        defaultConfig.respectSystemPreferences = false
         engine.updateConfiguration(defaultConfig)
     }
     
     func testBatchAnimations() async throws {
         let engine = WindowAnimationEngine.shared
-        engine.updateConfiguration(AnimationConfig.default)
+        var config = AnimationConfig.default
+        config.respectSystemPreferences = false // Disable system preference checking for tests
+        engine.updateConfiguration(config)
         
         // Create multiple test windows
         let testWindow1 = TestWindow.new(id: 40, parent: Workspace.get(byName: "test").rootTilingContainer)
