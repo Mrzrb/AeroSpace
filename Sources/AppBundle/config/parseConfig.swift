@@ -114,8 +114,14 @@ private let configParser: [String: any ParserProtocol<Config>] = [
     "workspace-to-monitor-force-assignment": Parser(\.workspaceToMonitorForceAssignment, parseWorkspaceToMonitorAssignment),
     "on-window-detected": Parser(\.onWindowDetected, parseOnWindowDetectedArray),
 
+<<<<<<< Updated upstream
     "bsp": Parser(\.bsp, parseBSPConfig),
     "animation": Parser(\.animation, parseAnimationConfig),
+||||||| Stash base
+    "bsp": Parser(\.bsp, parseBSPConfig),
+=======
+
+>>>>>>> Stashed changes
 
     // Deprecated
     "non-empty-workspaces-root-containers-layout-on-startup": Parser(\._nonEmptyWorkspacesRootContainersLayoutOnStartup, parseStartupRootContainerLayout),
@@ -393,15 +399,7 @@ func expectedActualTypeError(expected: [TOMLType], actual: TOMLType, _ backtrace
     .semantic(backtrace, expectedActualTypeError(expected: expected, actual: actual))
 }
 
-private let bspConfigParser: [String: any ParserProtocol<BSPConfig>] = [
-    "split-ratio": Parser(\.splitRatio, parseDouble),
-    "auto-split-threshold": Parser(\.autoSplitThreshold, parseDouble),
-    "preferred-split-direction": Parser(\.preferredSplitDirection, parseOptionalOrientation),
-]
 
-private func parseBSPConfig(_ raw: TOMLValueConvertible, _ backtrace: TomlBacktrace, _ errors: inout [TomlParseError]) -> BSPConfig {
-    parseTable(raw, BSPConfig(), bspConfigParser, backtrace, &errors)
-}
 
 private func parseDouble(_ raw: TOMLValueConvertible, _ backtrace: TomlBacktrace) -> ParsedToml<Double> {
     if let doubleValue = raw.double {

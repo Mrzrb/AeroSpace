@@ -119,6 +119,9 @@ let move_workspace_to_monitor_help_generated = """
 let move_help_generated = """
     USAGE: move [-h|--help] [--window-id <window-id>] [--boundaries <boundary>] [--boundaries-action <boundary-action>] (left|down|up|right)
     """
+let optimize_bsp_help_generated = """
+    USAGE: optimize-bsp [-h|--help] [--window-id <window-id>] [--workspace <workspace>]
+    """
 let reload_config_help_generated = """
     USAGE: reload-config [-h|--help] [--no-gui] [--dry-run]
     """

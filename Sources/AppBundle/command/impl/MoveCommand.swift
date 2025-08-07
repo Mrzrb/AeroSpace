@@ -107,14 +107,16 @@ private let moveOutMacosUnconventionalWindow = "moving macOS fullscreen, minimiz
     }) as? TilingContainer
     guard let innerMostChild else { return false }
     guard let parent = innerMostChild.parent else { return false }
+    
+    let result: Bool
     switch parent.nodeCases {
         case .tilingContainer(let parent):
             check(parent.orientation == direction.orientation)
             guard let ownIndex = innerMostChild.ownIndex else { return false }
             window.bind(to: parent, adaptiveWeight: WEIGHT_AUTO, index: ownIndex + direction.insertionOffset)
-            return true
+            result = true
         case .workspace(let parent):
-            return hitWorkspaceBoundaries(window, parent, io, args, direction, env)
+            result = hitWorkspaceBoundaries(window, parent, io, args, direction, env)
         case .macosMinimizedWindowsContainer, .macosFullscreenWindowsContainer, .macosHiddenAppsWindowsContainer:
             return io.err(moveOutMacosUnconventionalWindow)
         case .macosPopupWindowsContainer:
@@ -122,6 +124,13 @@ private let moveOutMacosUnconventionalWindow = "moving macOS fullscreen, minimiz
         case .window:
             die("Window can't contain children nodes")
     }
+    
+    // Apply BSP optimization after successful move
+    if result {
+        optimizeBSPAfterWindowMove(window: window)
+    }
+    
+    return result
 }
 
 @MainActor private func createImplicitContainerAndMoveWindow(
@@ -151,6 +160,10 @@ private let moveOutMacosUnconventionalWindow = "moving macOS fullscreen, minimiz
                 index: deepTarget.ownIndex.orDie() + 1,
             )
     }
+    
+    // Apply BSP optimization after successful move
+    optimizeBSPAfterWindowMove(window: window)
+    
     return true
 }
 
@@ -168,5 +181,29 @@ extension TilingTreeNodeCases {
                         .findDeepMoveInTargetRecursive(orientation)
                 }
         }
+    }
+}
+
+/// Optimizes BSP layout after a window move operation
+@MainActor private func optimizeBSPAfterWindowMove(window: Window) {
+    // Find the workspace containing the window
+    guard let workspace = window.nodeWorkspace else { return }
+    
+    // Get the root container
+    let rootContainer = workspace.rootTilingContainer
+    
+    // Only optimize if we're dealing with BSP layout
+    guard rootContainer.layout == .bsp else { return }
+    
+    // Handle root container change and optimize the entire BSP tree
+    rootContainer.handleRootContainerChange()
+    
+    // Also optimize any parent containers that might have been affected
+    var currentParent = window.parent as? TilingContainer
+    while let parent = currentParent {
+        if parent.layout == .bsp {
+            parent.handleRootContainerChange()
+        }
+        currentParent = parent.parent as? TilingContainer
     }
 }
