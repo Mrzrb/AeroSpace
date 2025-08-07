@@ -35,13 +35,15 @@ class TreeNode: Equatable, AeroAny {
         guard let parent else { die("Can't change weight if TreeNode doesn't have parent") }
         switch getChildParentRelation(child: self, parent: parent) {
             case .tiling(let parent):
-                if parent.orientation != targetOrientation {
-                    die("You can't change \(targetOrientation) weight of nodes located in \(parent.orientation) container")
+                if parent.orientation == targetOrientation {
+                    if parent.layout != .tiles && parent.layout != .bsp {
+                        die("Weight can be changed only for nodes whose parent has 'tiles' or 'bsp' layout")
+                    }
+                    adaptiveWeight = newValue
+                } else {
+                    // If orientations don't match, delegate to parent (similar to getWeight behavior)
+                    parent.setWeight(targetOrientation, newValue)
                 }
-                if parent.layout != .tiles && parent.layout != .bsp {
-                    die("Weight can be changed only for nodes whose parent has 'tiles' or 'bsp' layout")
-                }
-                adaptiveWeight = newValue
             default:
                 die("Can't change weight")
         }
