@@ -1,6 +1,16 @@
 # Place a copy of this config to ~/.aerospace.toml
 # After that, you can edit ~/.aerospace.toml to your liking
 
+# This configuration includes advanced animation and visual effects features:
+# - GPU-accelerated animations for better performance
+# - Motion blur effects for fast-moving windows
+# - Particle effects for window operations
+# - Ripple effects for multi-window operations
+# - Advanced easing functions (spring, bounce, elastic)
+#
+# Note: Visual effects are disabled by default for compatibility.
+# Enable them by setting visual-effects.enabled = true
+
 # You can use it to add commands that run after AeroSpace startup.
 # Available commands : https://nikitabobko.github.io/AeroSpace/commands
 after-startup-command = []
@@ -90,6 +100,8 @@ automatically-unhide-macos-hidden-apps = false
     
     # Animation easing function
     # Possible values: 'linear', 'ease-in', 'ease-out', 'ease-in-out'
+    # Advanced: 'spring(damping, velocity)', 'bounce(intensity)', 'elastic(amplitude, period)'
+    # Custom: 'cubic-bezier(x1, y1, x2, y2)'
     easing-function = 'ease-out'
     
     # Respect system accessibility preferences (e.g., "Reduce Motion")
@@ -105,6 +117,99 @@ automatically-unhide-macos-hidden-apps = false
     max-concurrent-animations = 10
     adaptive-quality = true
     min-frame-rate = 30.0
+    
+    # GPU acceleration settings
+    gpu-acceleration-enabled = true
+    # Possible values: 'disabled', 'automatic', 'forced'
+    gpu-acceleration-mode = 'automatic'
+    gpu-batch-size = 32
+    gpu-fallback-threshold = 0.8
+    
+    # Spring animation settings (when using spring easing)
+    spring-damping = 0.8
+    spring-velocity = 0.0
+    
+    # Bounce animation settings (when using bounce easing)
+    bounce-intensity = 1.0
+    
+    # Elastic animation settings (when using elastic easing)
+    elastic-amplitude = 0.5
+    elastic-period = 0.3
+
+# Visual effects configuration
+# Provides advanced visual effects like motion blur, particles, and ripples
+# See: https://nikitabobko.github.io/AeroSpace/guide#visual-effects
+[visual-effects]
+    # Master switch to enable/disable all visual effects
+    enabled = false  # Disabled by default for compatibility
+    
+    # Automatically adjust quality based on performance
+    adaptive-quality = true
+    
+    # Performance threshold in milliseconds (~60fps = 16.67ms)
+    performance-threshold = 16.67
+    
+    # Maximum concurrent effects
+    max-concurrent-effects = 10
+    
+    # Effect quality level: 'low', 'medium', 'high', 'ultra'
+    effect-quality-level = 'high'
+    
+    # Enable GPU acceleration for effects (requires Metal support)
+    enable-gpu-acceleration = true
+    
+    # Motion blur effects for fast-moving windows
+    [visual-effects.motion-blur]
+        enabled = true
+        # Velocity threshold to trigger motion blur (pixels/second)
+        velocity-threshold = 100.0
+        # Maximum blur speed (pixels/second)
+        max-speed = 1000.0
+        # Maximum blur intensity (0.0-1.0)
+        max-intensity = 0.8
+        # Automatically apply motion effects based on velocity
+        automatic-effects = true
+    
+    # Afterimage/trail effects
+    [visual-effects.afterimage]
+        enabled = true
+        # Number of afterimage frames in the trail
+        trail-length = 5
+        # Opacity decay rate (0.1-1.0)
+        opacity-decay = 0.7
+        # Update interval in seconds (~30fps = 0.033)
+        update-interval = 0.033
+    
+    # Particle effects for window operations
+    [visual-effects.particles]
+        enabled = true
+        # Number of particles per effect
+        count = 20
+        # Particle size in pixels
+        size-width = 4.0
+        size-height = 4.0
+        # Effect duration in seconds
+        duration = 1.0
+        # Particle spread radius in pixels
+        spread = 50.0
+        # Particle velocity in pixels/second
+        velocity = 100.0
+        # Available particle types: 'spark', 'bubble', 'star', 'geometric'
+        available-types = ['spark', 'bubble', 'star', 'geometric']
+        # Default particle type
+        default-type = 'spark'
+    
+    # Ripple effects for multi-window operations
+    [visual-effects.ripple]
+        enabled = true
+        # Ripple propagation speed (pixels/second)
+        speed = 300.0
+        # Maximum ripple radius (pixels)
+        max-radius = 200.0
+        # Ripple duration (seconds)
+        duration = 0.8
+        # Ripple intensity (0.0-1.0)
+        intensity = 0.6
 
 # 'main' binding mode declaration
 # See: https://nikitabobko.github.io/AeroSpace/guide#binding-modes
