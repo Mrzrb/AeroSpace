@@ -1,8 +1,9 @@
 import Foundation
 import CoreGraphics
+import Common
 
 /// Configuration for visual effects system
-struct VisualEffectsConfig {
+struct VisualEffectsConfig: ConvenienceCopyable {
 
     // MARK: - General Settings
 
@@ -33,6 +34,17 @@ struct VisualEffectsConfig {
     var particleEffectDuration: TimeInterval = 1.0
     var particleSpread: Double = 50.0 // pixels
     var particleVelocity: Double = 100.0 // pixels per second
+    
+    // Helper properties for configuration parsing
+    var particleSizeWidth: Double {
+        get { particleSize.width }
+        set { particleSize = CGSize(width: newValue, height: particleSize.height) }
+    }
+    
+    var particleSizeHeight: Double {
+        get { particleSize.height }
+        set { particleSize = CGSize(width: particleSize.width, height: newValue) }
+    }
 
     // MARK: - Ripple Effects Settings
 

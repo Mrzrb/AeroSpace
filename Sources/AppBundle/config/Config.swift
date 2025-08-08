@@ -63,6 +63,7 @@ struct Config: ConvenienceCopyable {
     var preservedWorkspaceNames: [String] = []
     var bsp: BSPConfig = BSPConfig()
     var animation: AnimationConfig = AnimationConfig()
+    var visualEffects: VisualEffectsConfig = VisualEffectsConfig()
 }
 
 enum DefaultContainerOrientation: String {
