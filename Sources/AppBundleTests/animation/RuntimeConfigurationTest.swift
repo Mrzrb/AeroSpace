@@ -9,7 +9,8 @@ class RuntimeConfigurationTest: XCTestCase {
         let animationEngine = WindowAnimationEngine.shared
 
         // Set up notification observer
-        var notificationReceived = false
+        let notificationExpectation = expectation(description: "Configuration change notification")
+        let configLock = NSLock()
         var receivedOldConfig: AnimationConfig?
         var receivedNewConfig: AnimationConfig?
 
@@ -18,9 +19,11 @@ class RuntimeConfigurationTest: XCTestCase {
             object: animationEngine,
             queue: .main,
         ) { notification in
-            notificationReceived = true
+            configLock.lock()
             receivedOldConfig = notification.userInfo?["oldConfig"] as? AnimationConfig
             receivedNewConfig = notification.userInfo?["newConfig"] as? AnimationConfig
+            configLock.unlock()
+            notificationExpectation.fulfill()
         }
 
         defer {
@@ -36,12 +39,18 @@ class RuntimeConfigurationTest: XCTestCase {
 
         animationEngine.updateConfiguration(newConfig)
 
-        // Verify notification was posted
-        XCTAssertTrue(notificationReceived, "Configuration change notification should be posted")
-        XCTAssertNotNil(receivedOldConfig, "Old configuration should be included in notification")
-        XCTAssertNotNil(receivedNewConfig, "New configuration should be included in notification")
+        // Wait for notification
+        wait(for: [notificationExpectation], timeout: 1.0)
 
-        if let oldConfig = receivedOldConfig, let newConfig = receivedNewConfig {
+        configLock.lock()
+        let receivedOld = receivedOldConfig
+        let receivedNew = receivedNewConfig
+        configLock.unlock()
+
+        XCTAssertNotNil(receivedOld, "Old configuration should be included in notification")
+        XCTAssertNotNil(receivedNew, "New configuration should be included in notification")
+
+        if let oldConfig = receivedOld, let newConfig = receivedNew {
             XCTAssertEqual(oldConfig.defaultDuration, AnimationConfig.default.defaultDuration)
             XCTAssertEqual(newConfig.defaultDuration, 0.5)
             XCTAssertEqual(newConfig.easingFunction, .easeIn)
@@ -214,7 +223,10 @@ class RuntimeConfigurationTest: XCTestCase {
     func testConfigurationChangeNotificationContent() {
         let animationEngine = WindowAnimationEngine.shared
 
+        let notificationExpectation = expectation(description: "Configuration change notifications")
+        notificationExpectation.expectedFulfillmentCount = 2
         var notifications: [(old: AnimationConfig, new: AnimationConfig)] = []
+        let notificationsLock = NSLock()
 
         let observer = NotificationCenter.default.addObserver(
             forName: .animationConfigurationDidChange,
@@ -224,7 +236,10 @@ class RuntimeConfigurationTest: XCTestCase {
             if let oldConfig = notification.userInfo?["oldConfig"] as? AnimationConfig,
                let newConfig = notification.userInfo?["newConfig"] as? AnimationConfig
             {
+                notificationsLock.lock()
                 notifications.append((old: oldConfig, new: newConfig))
+                notificationsLock.unlock()
+                notificationExpectation.fulfill()
             }
         }
 
@@ -244,16 +259,29 @@ class RuntimeConfigurationTest: XCTestCase {
         config2.easingFunction = .easeIn
         animationEngine.updateConfiguration(config2)
 
+        // Wait for notifications
+        wait(for: [notificationExpectation], timeout: 2.0)
+
         // Verify we received notifications for both changes
-        XCTAssertEqual(notifications.count, 2)
+        notificationsLock.lock()
+        let notificationCount = notifications.count
+        let firstNotification = notifications.first
+        let secondNotification = notifications.count > 1 ? notifications[1] : nil
+        notificationsLock.unlock()
+
+        XCTAssertEqual(notificationCount, 2)
 
         // Verify first notification
-        XCTAssertEqual(notifications[0].old.defaultDuration, AnimationConfig.default.defaultDuration)
-        XCTAssertEqual(notifications[0].new.defaultDuration, 0.3)
+        if let first = firstNotification {
+            XCTAssertEqual(first.old.defaultDuration, AnimationConfig.default.defaultDuration)
+            XCTAssertEqual(first.new.defaultDuration, 0.3)
+        }
 
         // Verify second notification
-        XCTAssertEqual(notifications[1].old.defaultDuration, 0.3)
-        XCTAssertEqual(notifications[1].new.defaultDuration, 0.6)
-        XCTAssertEqual(notifications[1].new.easingFunction, .easeIn)
+        if let second = secondNotification {
+            XCTAssertEqual(second.old.defaultDuration, 0.3)
+            XCTAssertEqual(second.new.defaultDuration, 0.6)
+            XCTAssertEqual(second.new.easingFunction, .easeIn)
+        }
     }
 }

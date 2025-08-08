@@ -20,12 +20,12 @@ class WindowAnimationEngine {
     private var activeAnimations: [UInt32: WindowAnimationContext] = [:]
     private var animationTimer: Timer?
     private var isPaused: Bool = false
-    
+
     // CVDisplayLink properties
     private var displayLink: CVDisplayLink?
     private var displayLinkRunning: Bool = false
     private var lastDisplayTime: CVTimeStamp?
-    
+
     // Multi-display support
     private var displayLinks: [CGDirectDisplayID: CVDisplayLink] = [:]
     private var displayRefreshRates: [CGDirectDisplayID: Double] = [:]
@@ -57,12 +57,12 @@ class WindowAnimationEngine {
 
     // Accessibility integration
     private var originalConfigEnabled: Bool = true // Track original enabled state
-    
+
     // Hardware acceleration
     private var hardwareAccelerationStatus: HardwareAcceleration.AccelerationStatus = .unavailable(reason: "Not initialized")
     private var lastHardwareCheck: Date = Date()
     private let hardwareCheckInterval: TimeInterval = 5.0 // Check every 5 seconds
-    
+
     // Batch processing
     private var batchProcessor: AnimationBatchProcessor?
 
@@ -135,59 +135,59 @@ class WindowAnimationEngine {
     var currentConfiguration: AnimationConfig {
         return config
     }
-    
+
     // MARK: - CVDisplayLink Management
-    
+
     /// CVDisplayLink callback function
     private let displayLinkCallback: CVDisplayLinkOutputCallback = { (displayLink, inNow, inOutputTime, flagsIn, flagsOut, displayLinkContext) -> CVReturn in
         guard let context = displayLinkContext else {
             return kCVReturnError
         }
-        
+
         let engine = Unmanaged<WindowAnimationEngine>.fromOpaque(context).takeUnretainedValue()
-        
+
         // Copy the timestamp to avoid data races
         let timestamp = inOutputTime.pointee
-        
+
         // Schedule the animation update on the main queue
         DispatchQueue.main.async {
             engine.updateAnimationsFromDisplayLink(timestamp: timestamp)
         }
-        
+
         return kCVReturnSuccess
     }
-    
+
     /// Setup CVDisplayLink for display-synchronized animation updates
     private func setupDisplayLink() {
         guard displayLink == nil else { return }
-        
+
         var displayLinkRef: CVDisplayLink?
         let result = CVDisplayLinkCreateWithActiveCGDisplays(&displayLinkRef)
-        
+
         guard result == kCVReturnSuccess, let displayLink = displayLinkRef else {
             print("Failed to create CVDisplayLink, falling back to Timer")
             return
         }
-        
+
         self.displayLink = displayLink
-        
+
         // Set the callback
         let context = Unmanaged.passUnretained(self).toOpaque()
         CVDisplayLinkSetOutputCallback(displayLink, displayLinkCallback, context)
-        
+
         // Set the display for the main screen
         if let mainScreen = NSScreen.main {
             let displayID = mainScreen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber
-            if let displayID = displayID {
+            if let displayID {
                 CVDisplayLinkSetCurrentCGDisplay(displayLink, displayID.uint32Value)
             }
         }
     }
-    
+
     /// Start the CVDisplayLink
     private func startDisplayLink() {
-        guard let displayLink = displayLink, !displayLinkRunning else { return }
-        
+        guard let displayLink, !displayLinkRunning else { return }
+
         let result = CVDisplayLinkStart(displayLink)
         if result == kCVReturnSuccess {
             displayLinkRunning = true
@@ -196,120 +196,120 @@ class WindowAnimationEngine {
             print("Failed to start CVDisplayLink: \(result)")
         }
     }
-    
+
     /// Stop the CVDisplayLink
     private func stopDisplayLink() {
-        guard let displayLink = displayLink, displayLinkRunning else { return }
-        
+        guard let displayLink, displayLinkRunning else { return }
+
         CVDisplayLinkStop(displayLink)
         displayLinkRunning = false
         lastDisplayTime = nil
     }
-    
+
     /// Cleanup CVDisplayLink resources
     private func cleanupDisplayLink() {
         stopDisplayLink()
         displayLink = nil
     }
-    
+
     /// Check if CVDisplayLink is available and working
     private var isDisplayLinkAvailable: Bool {
         return displayLink != nil
     }
-    
+
     /// Get the current display refresh rate from CVDisplayLink
     private func getDisplayRefreshRateFromDisplayLink() -> Double {
-        guard let displayLink = displayLink else {
+        guard let displayLink else {
             return 60.0 // Fallback
         }
-        
+
         let time = CVDisplayLinkGetNominalOutputVideoRefreshPeriod(displayLink)
         if time.timeValue == 0 || time.timeScale == 0 {
             return 60.0 // Fallback for invalid time
         }
-        
+
         let refreshRate = Double(time.timeScale) / Double(time.timeValue)
         return max(30.0, min(240.0, refreshRate)) // Clamp to reasonable values
     }
-    
+
     // MARK: - Multi-Display Support
-    
+
     /// Detect all active displays and their refresh rates
     private func detectActiveDisplays() {
         var displayCount: UInt32 = 0
         var result = CGGetActiveDisplayList(0, nil, &displayCount)
-        
+
         guard result == CGError.success && displayCount > 0 else {
             print("Failed to get active display count")
             return
         }
-        
+
         var displays = Array<CGDirectDisplayID>(repeating: 0, count: Int(displayCount))
         result = CGGetActiveDisplayList(displayCount, &displays, &displayCount)
-        
+
         guard result == CGError.success else {
             print("Failed to get active display list")
             return
         }
-        
+
         // Clear previous display data
         activeDisplays.removeAll()
         displayRefreshRates.removeAll()
-        
+
         // Get the primary display
         primaryDisplayID = CGMainDisplayID()
-        
+
         // Detect refresh rate for each display
         for displayID in displays {
             activeDisplays.insert(displayID)
             let refreshRate = getRefreshRateForDisplay(displayID)
             displayRefreshRates[displayID] = refreshRate
-            
+
             print("Detected display \(displayID): \(refreshRate) Hz")
         }
     }
-    
+
     /// Get refresh rate for a specific display
     private func getRefreshRateForDisplay(_ displayID: CGDirectDisplayID) -> Double {
         guard let mode = CGDisplayCopyDisplayMode(displayID) else {
             return 60.0 // Fallback
         }
-        
+
         let refreshRate = mode.refreshRate
         return refreshRate > 0 ? max(30.0, min(240.0, refreshRate)) : 60.0
     }
-    
+
     /// Setup CVDisplayLink for a specific display
     private func setupDisplayLinkForDisplay(_ displayID: CGDirectDisplayID) -> CVDisplayLink? {
         var displayLinkRef: CVDisplayLink?
         let result = CVDisplayLinkCreateWithCGDisplay(displayID, &displayLinkRef)
-        
+
         guard result == kCVReturnSuccess, let displayLink = displayLinkRef else {
             print("Failed to create CVDisplayLink for display \(displayID)")
             return nil
         }
-        
+
         // Set the callback
         let context = Unmanaged.passUnretained(self).toOpaque()
         CVDisplayLinkSetOutputCallback(displayLink, displayLinkCallback, context)
-        
+
         return displayLink
     }
-    
+
     /// Setup CVDisplayLinks for all active displays
     private func setupMultiDisplayLinks() {
         detectActiveDisplays()
-        
+
         // Clean up existing display links
         cleanupMultiDisplayLinks()
-        
+
         // Create display links for all active displays
         for displayID in activeDisplays {
             if let displayLink = setupDisplayLinkForDisplay(displayID) {
                 displayLinks[displayID] = displayLink
             }
         }
-        
+
         // If we have multiple displays, use the primary display's CVDisplayLink as the main one
         if let primaryDisplayLink = displayLinks[primaryDisplayID] {
             displayLink = primaryDisplayLink
@@ -317,7 +317,7 @@ class WindowAnimationEngine {
             displayLink = firstDisplayLink
         }
     }
-    
+
     /// Start CVDisplayLinks for all displays
     private func startMultiDisplayLinks() {
         for (displayID, displayLink) in displayLinks {
@@ -326,13 +326,13 @@ class WindowAnimationEngine {
                 print("Failed to start CVDisplayLink for display \(displayID): \(result)")
             }
         }
-        
+
         if !displayLinks.isEmpty {
             displayLinkRunning = true
             lastDisplayTime = nil
         }
     }
-    
+
     /// Stop CVDisplayLinks for all displays
     private func stopMultiDisplayLinks() {
         for (_, displayLink) in displayLinks {
@@ -341,39 +341,39 @@ class WindowAnimationEngine {
         displayLinkRunning = false
         lastDisplayTime = nil
     }
-    
+
     /// Cleanup all multi-display CVDisplayLinks
     private func cleanupMultiDisplayLinks() {
         stopMultiDisplayLinks()
         displayLinks.removeAll()
     }
-    
+
     /// Get the optimal refresh rate for animation timing (uses the highest refresh rate among active displays)
     private func getOptimalMultiDisplayRefreshRate() -> Double {
         guard !displayRefreshRates.isEmpty else {
             return 60.0 // Fallback
         }
-        
+
         // Use the highest refresh rate among all displays for smoothest animation
         return displayRefreshRates.values.max() ?? 60.0
     }
-    
+
     /// Handle display configuration changes
     @objc private func handleDisplayConfigurationChange() {
         print("Display configuration changed, updating CVDisplayLinks...")
-        
+
         // Re-detect displays and update display links
         setupMultiDisplayLinks()
-        
+
         // Update the display refresh rate
         displayRefreshRate = getOptimalMultiDisplayRefreshRate()
-        
+
         // Restart display links if they were running
         if displayLinkRunning {
             startMultiDisplayLinks()
         }
     }
-    
+
     /// Update animations synchronized with display refresh (called from CVDisplayLink callback)
     private func updateAnimationsFromDisplayLink(timestamp: CVTimeStamp) {
         // Track display synchronization accuracy
@@ -381,15 +381,15 @@ class WindowAnimationEngine {
             let actualInterval = Double(timestamp.videoTime - lastTime.videoTime) / Double(timestamp.videoTimeScale)
             let expectedInterval = 1.0 / displayRefreshRate
             let syncAccuracy = abs(actualInterval - expectedInterval) / expectedInterval
-            
+
             // Log sync issues if accuracy is poor (more than 10% off)
             if syncAccuracy > 0.1 {
                 print("Display sync accuracy warning: expected \(expectedInterval)s, got \(actualInterval)s")
             }
         }
-        
+
         lastDisplayTime = timestamp
-        
+
         // Perform the actual animation updates
         updateAnimations()
     }
@@ -822,51 +822,51 @@ class WindowAnimationEngine {
     private func cleanupAnimationContextPool() {
         animationContextPool.removeAll()
     }
-    
+
     // MARK: - Hardware Acceleration
-    
+
     /// Initialize hardware acceleration detection
     private func initializeHardwareAcceleration() {
         hardwareAccelerationStatus = HardwareAcceleration.detectCapabilities()
         lastHardwareCheck = Date()
-        
+
         switch hardwareAccelerationStatus {
-        case .available(let gpuInfo):
-            print("Hardware acceleration initialized: \(gpuInfo.name)")
-        case .unavailable(let reason):
-            print("Hardware acceleration unavailable: \(reason)")
-        case .disabled(let reason):
-            print("Hardware acceleration disabled: \(reason)")
+            case .available(let gpuInfo):
+                print("Hardware acceleration initialized: \(gpuInfo.name)")
+            case .unavailable(let reason):
+                print("Hardware acceleration unavailable: \(reason)")
+            case .disabled(let reason):
+                print("Hardware acceleration disabled: \(reason)")
         }
     }
-    
+
     /// Check if hardware acceleration should be used for current conditions
     private func shouldUseHardwareAcceleration() -> Bool {
         // Check configuration settings
         guard config.gpuAccelerationEnabled else { return false }
-        
+
         switch config.gpuAccelerationMode {
-        case .disabled:
-            return false
-        case .forced:
-            return HardwareAcceleration.isAvailable
-        case .automatic:
-            // Periodic hardware capability check
-            let now = Date()
-            if now.timeIntervalSince(lastHardwareCheck) > hardwareCheckInterval {
-                hardwareAccelerationStatus = HardwareAcceleration.detectCapabilities()
-                lastHardwareCheck = now
-            }
-            
-            return HardwareAcceleration.shouldUseAcceleration
+            case .disabled:
+                return false
+            case .forced:
+                return HardwareAcceleration.isAvailable
+            case .automatic:
+                // Periodic hardware capability check
+                let now = Date()
+                if now.timeIntervalSince(lastHardwareCheck) > hardwareCheckInterval {
+                    hardwareAccelerationStatus = HardwareAcceleration.detectCapabilities()
+                    lastHardwareCheck = now
+                }
+
+                return HardwareAcceleration.shouldUseAcceleration
         }
     }
-    
+
     /// Get current hardware acceleration status
     var hardwareAccelerationInfo: (status: HardwareAcceleration.AccelerationStatus, resourceInfo: HardwareAcceleration.ResourceInfo?) {
         return (hardwareAccelerationStatus, HardwareAcceleration.getResourceInfo())
     }
-    
+
     /// Get recommended batch size for current hardware conditions
     private func getRecommendedBatchSize() -> Int {
         if shouldUseHardwareAcceleration() {
@@ -876,20 +876,20 @@ class WindowAnimationEngine {
             return min(config.gpuBatchSize / 4, 8)
         }
     }
-    
+
     /// Initialize batch processor
     private func initializeBatchProcessor() {
         batchProcessor = AnimationBatchProcessor()
         print("Animation batch processor initialized")
     }
-    
+
     /// Process multiple animations using batch processing
     private func processBatchedAnimations(_ contexts: [WindowAnimationContext]) async -> [Rect] {
         guard let processor = batchProcessor else {
             // Fallback to individual processing
             return contexts.compactMap { $0.getCurrentRect() }
         }
-        
+
         // Convert animation contexts to batched animations
         let batchedAnimations = contexts.map { context in
             AnimationBatchProcessor.BatchedAnimation(
@@ -897,13 +897,13 @@ class WindowAnimationEngine {
                 sourceRect: context.sourceRect,
                 targetRect: context.targetRect,
                 progress: context.currentProgress,
-                easing: context.easingFunction
+                easing: context.easingFunction,
             )
         }
-        
+
         return await processor.processBatch(batchedAnimations)
     }
-    
+
     /// Get batch processing performance metrics
     func getBatchProcessingMetrics() -> AnimationBatchProcessor.BatchPerformanceMetrics? {
         return batchProcessor?.getPerformanceMetrics()
@@ -1012,13 +1012,13 @@ class WindowAnimationEngine {
             displayRefreshRate = getOptimalMultiDisplayRefreshRate()
             return
         }
-        
+
         // First try to get refresh rate from CVDisplayLink if available
         if displayLink != nil {
             displayRefreshRate = getDisplayRefreshRateFromDisplayLink()
             return
         }
-        
+
         // Fallback to Core Graphics method
         guard let screen = NSScreen.main else {
             displayRefreshRate = 60.0 // Default fallback
@@ -1055,12 +1055,12 @@ class WindowAnimationEngine {
 
     private func startTimerIfNeeded() {
         guard !activeAnimations.isEmpty && !isPaused else { return }
-        
+
         // Setup multi-display CVDisplayLinks if not already done
         if displayLinks.isEmpty {
             setupMultiDisplayLinks()
         }
-        
+
         // Prefer CVDisplayLink for better display synchronization
         if !displayLinks.isEmpty && !displayLinkRunning {
             startMultiDisplayLinks()
@@ -1080,7 +1080,7 @@ class WindowAnimationEngine {
         if displayLinkRunning {
             stopMultiDisplayLinks()
         }
-        
+
         // Stop Timer if running
         animationTimer?.invalidate()
         animationTimer = nil
@@ -1255,7 +1255,7 @@ class WindowAnimationEngine {
             displayLinkRunning: displayLinkRunning,
             displaySyncAccuracy: displaySyncAccuracy,
             activeDisplayCount: activeDisplays.count,
-            displayRefreshRates: displayRefreshRates
+            displayRefreshRates: displayRefreshRates,
         )
     }
 
@@ -1278,7 +1278,7 @@ class WindowAnimationEngine {
             }
         }
     }
-    
+
     /// Setup observer for display configuration changes
     private func setupDisplayConfigurationObserver() {
         // Monitor display configuration changes
@@ -1286,7 +1286,7 @@ class WindowAnimationEngine {
             self,
             selector: #selector(handleDisplayConfigurationChange),
             name: NSApplication.didChangeScreenParametersNotification,
-            object: nil
+            object: nil,
         )
     }
 

@@ -62,54 +62,54 @@ class AnimationConfigTest: XCTestCase {
 
         config.minFrameRate = 150.0
         XCTAssertFalse(config.validate().isEmpty)
-        
+
         // Reset to valid
         config.minFrameRate = 30.0
         XCTAssertTrue(config.validate().isEmpty)
-        
+
         // Test invalid spring parameters
         config.springDamping = -0.1
         XCTAssertFalse(config.validate().isEmpty)
         XCTAssertTrue(config.validate().contains { $0.contains("Spring parameters are invalid") })
-        
+
         config.springDamping = 2.5
         XCTAssertFalse(config.validate().isEmpty)
-        
+
         config.springDamping = 1.0
         config.springVelocity = 15.0
         XCTAssertFalse(config.validate().isEmpty)
-        
+
         config.springVelocity = -15.0
         XCTAssertFalse(config.validate().isEmpty)
-        
+
         // Reset to valid
         config.springVelocity = 0.0
         XCTAssertTrue(config.validate().isEmpty)
-        
+
         // Test invalid bounce parameters
         config.bounceIntensity = -0.1
         XCTAssertFalse(config.validate().isEmpty)
         XCTAssertTrue(config.validate().contains { $0.contains("Bounce parameters are invalid") })
-        
+
         config.bounceIntensity = 3.5
         XCTAssertFalse(config.validate().isEmpty)
-        
+
         // Reset to valid
         config.bounceIntensity = 1.0
         XCTAssertTrue(config.validate().isEmpty)
-        
+
         // Test invalid elastic parameters
         config.elasticAmplitude = -0.1
         XCTAssertFalse(config.validate().isEmpty)
         XCTAssertTrue(config.validate().contains { $0.contains("Elastic parameters are invalid") })
-        
+
         config.elasticAmplitude = 2.5
         XCTAssertFalse(config.validate().isEmpty)
-        
+
         config.elasticAmplitude = 1.0
         config.elasticPeriod = 0.0
         XCTAssertFalse(config.validate().isEmpty)
-        
+
         config.elasticPeriod = 1.5
         XCTAssertFalse(config.validate().isEmpty)
     }
@@ -206,87 +206,87 @@ class AnimationConfigTest: XCTestCase {
 
     func testCustomBezierCurveValidation() {
         var config = AnimationConfig()
-        
+
         // Valid custom easing function
         config.easingFunction = .custom(x1: 0.25, y1: 0.1, x2: 0.75, y2: 0.9)
         XCTAssertTrue(config.validate().isEmpty)
-        
+
         // Invalid custom easing function (X values outside [0, 1])
         config.easingFunction = .custom(x1: -0.1, y1: 0.0, x2: 1.0, y2: 1.0)
         XCTAssertFalse(config.validate().isEmpty)
         XCTAssertTrue(config.validate().contains { $0.contains("invalid Bézier curve parameters") })
-        
+
         config.easingFunction = .custom(x1: 0.0, y1: 0.0, x2: 1.5, y2: 1.0)
         XCTAssertFalse(config.validate().isEmpty)
-        
+
         // Y values outside [0, 1] should be valid (for overshoot effects)
         config.easingFunction = .custom(x1: 0.5, y1: -0.5, x2: 0.5, y2: 1.5)
         XCTAssertTrue(config.validate().isEmpty)
-        
+
         // Standard easing functions should always be valid
         config.easingFunction = .linear
         XCTAssertTrue(config.validate().isEmpty)
-        
+
         config.easingFunction = .easeIn
         XCTAssertTrue(config.validate().isEmpty)
-        
+
         config.easingFunction = .easeOut
         XCTAssertTrue(config.validate().isEmpty)
-        
+
         config.easingFunction = .easeInOut
         XCTAssertTrue(config.validate().isEmpty)
-        
+
         // Spring easing functions should be valid with proper parameters
         config.easingFunction = .spring(damping: 0.8, velocity: 0.0)
         XCTAssertTrue(config.validate().isEmpty)
-        
+
         config.easingFunction = .spring(damping: 1.0, velocity: 2.0)
         XCTAssertTrue(config.validate().isEmpty)
-        
+
         // Invalid spring easing function parameters
         config.easingFunction = .spring(damping: -0.1, velocity: 0.0)
         XCTAssertFalse(config.validate().isEmpty)
         XCTAssertTrue(config.validate().contains { $0.contains("invalid parameters") })
-        
+
         config.easingFunction = .spring(damping: 2.5, velocity: 0.0)
         XCTAssertFalse(config.validate().isEmpty)
-        
+
         config.easingFunction = .spring(damping: 1.0, velocity: 15.0)
         XCTAssertFalse(config.validate().isEmpty)
-        
+
         // Bounce easing functions should be valid with proper parameters
         config.easingFunction = .bounce(intensity: 1.0)
         XCTAssertTrue(config.validate().isEmpty)
-        
+
         config.easingFunction = .bounce(intensity: 2.5)
         XCTAssertTrue(config.validate().isEmpty)
-        
+
         // Invalid bounce easing function parameters
         config.easingFunction = .bounce(intensity: -0.1)
         XCTAssertFalse(config.validate().isEmpty)
         XCTAssertTrue(config.validate().contains { $0.contains("invalid parameters") })
-        
+
         config.easingFunction = .bounce(intensity: 3.5)
         XCTAssertFalse(config.validate().isEmpty)
-        
+
         // Elastic easing functions should be valid with proper parameters
         config.easingFunction = .elastic(amplitude: 0.5, period: 0.3)
         XCTAssertTrue(config.validate().isEmpty)
-        
+
         config.easingFunction = .elastic(amplitude: 1.5, period: 0.8)
         XCTAssertTrue(config.validate().isEmpty)
-        
+
         // Invalid elastic easing function parameters
         config.easingFunction = .elastic(amplitude: -0.1, period: 0.3)
         XCTAssertFalse(config.validate().isEmpty)
         XCTAssertTrue(config.validate().contains { $0.contains("invalid parameters") })
-        
+
         config.easingFunction = .elastic(amplitude: 2.5, period: 0.3)
         XCTAssertFalse(config.validate().isEmpty)
-        
+
         config.easingFunction = .elastic(amplitude: 1.0, period: 0.0)
         XCTAssertFalse(config.validate().isEmpty)
-        
+
         config.easingFunction = .elastic(amplitude: 1.0, period: 1.5)
         XCTAssertFalse(config.validate().isEmpty)
     }
@@ -299,33 +299,33 @@ class AnimationConfigTest: XCTestCase {
             ("cubic-bezier(0, 0, 1, 1)", AnimationEasing.custom(x1: 0.0, y1: 0.0, x2: 1.0, y2: 1.0)),
             ("cubic-bezier(0.5, -0.5, 0.5, 1.5)", AnimationEasing.custom(x1: 0.5, y1: -0.5, x2: 0.5, y2: 1.5)),
         ]
-        
+
         for (input, expected) in validCases {
             let result = AnimationEasing.from(string: input)
             XCTAssertEqual(result, expected, "Failed to parse: \(input)")
         }
-        
+
         // Standard easing strings
         XCTAssertEqual(AnimationEasing.from(string: "linear"), .linear)
         XCTAssertEqual(AnimationEasing.from(string: "ease-in"), .easeIn)
         XCTAssertEqual(AnimationEasing.from(string: "ease-out"), .easeOut)
         XCTAssertEqual(AnimationEasing.from(string: "ease-in-out"), .easeInOut)
-        
+
         // Spring easing strings
         XCTAssertEqual(AnimationEasing.from(string: "spring(0.8, 0.0)"), .spring(damping: 0.8, velocity: 0.0))
         XCTAssertEqual(AnimationEasing.from(string: "spring(1.0, 2.0)"), .spring(damping: 1.0, velocity: 2.0))
         XCTAssertEqual(AnimationEasing.from(string: "spring(0.5, -1.5)"), .spring(damping: 0.5, velocity: -1.5))
-        
+
         // Bounce easing strings
         XCTAssertEqual(AnimationEasing.from(string: "bounce(1.0)"), .bounce(intensity: 1.0))
         XCTAssertEqual(AnimationEasing.from(string: "bounce(2.5)"), .bounce(intensity: 2.5))
         XCTAssertEqual(AnimationEasing.from(string: "bounce(0.5)"), .bounce(intensity: 0.5))
-        
+
         // Elastic easing strings
         XCTAssertEqual(AnimationEasing.from(string: "elastic(0.5, 0.3)"), .elastic(amplitude: 0.5, period: 0.3))
         XCTAssertEqual(AnimationEasing.from(string: "elastic(1.0, 0.2)"), .elastic(amplitude: 1.0, period: 0.2))
         XCTAssertEqual(AnimationEasing.from(string: "elastic(0.8, 0.8)"), .elastic(amplitude: 0.8, period: 0.8))
-        
+
         // Invalid strings
         XCTAssertNil(AnimationEasing.from(string: "invalid"))
         XCTAssertNil(AnimationEasing.from(string: "cubic-bezier(0.25, 0.1, 0.75)")) // Missing parameter
@@ -347,16 +347,16 @@ class AnimationConfigTest: XCTestCase {
     func testCustomBezierCurveRawValue() {
         let customEasing = AnimationEasing.custom(x1: 0.25, y1: 0.1, x2: 0.75, y2: 0.9)
         XCTAssertEqual(customEasing.rawValue, "cubic-bezier(0.25, 0.1, 0.75, 0.9)")
-        
+
         let standardEasing = AnimationEasing.linear
         XCTAssertEqual(standardEasing.rawValue, "linear")
-        
+
         let springEasing = AnimationEasing.spring(damping: 0.8, velocity: 2.0)
         XCTAssertEqual(springEasing.rawValue, "spring(0.8, 2.0)")
-        
+
         let bounceEasing = AnimationEasing.bounce(intensity: 1.5)
         XCTAssertEqual(bounceEasing.rawValue, "bounce(1.5)")
-        
+
         let elasticEasing = AnimationEasing.elastic(amplitude: 0.8, period: 0.4)
         XCTAssertEqual(elasticEasing.rawValue, "elastic(0.8, 0.4)")
     }
@@ -437,7 +437,7 @@ class AnimationConfigTest: XCTestCase {
         XCTAssertTrue(AnimationEasing.validateSpringParameters(damping: 0.0, velocity: 0.0))
         XCTAssertTrue(AnimationEasing.validateSpringParameters(damping: 1.0, velocity: 5.0))
         XCTAssertTrue(AnimationEasing.validateSpringParameters(damping: 2.0, velocity: -5.0))
-        
+
         // Invalid parameters
         XCTAssertFalse(AnimationEasing.validateSpringParameters(damping: -0.1, velocity: 0.0))
         XCTAssertFalse(AnimationEasing.validateSpringParameters(damping: 2.1, velocity: 0.0))
@@ -481,7 +481,7 @@ class AnimationConfigTest: XCTestCase {
         XCTAssertTrue(AnimationEasing.validateBounceParameters(intensity: 0.0))
         XCTAssertTrue(AnimationEasing.validateBounceParameters(intensity: 1.0))
         XCTAssertTrue(AnimationEasing.validateBounceParameters(intensity: 3.0))
-        
+
         // Invalid parameters
         XCTAssertFalse(AnimationEasing.validateBounceParameters(intensity: -0.1))
         XCTAssertFalse(AnimationEasing.validateBounceParameters(intensity: 3.1))
@@ -526,7 +526,7 @@ class AnimationConfigTest: XCTestCase {
         XCTAssertTrue(AnimationEasing.validateElasticParameters(amplitude: 0.0, period: 0.1))
         XCTAssertTrue(AnimationEasing.validateElasticParameters(amplitude: 1.0, period: 0.5))
         XCTAssertTrue(AnimationEasing.validateElasticParameters(amplitude: 2.0, period: 1.0))
-        
+
         // Invalid parameters
         XCTAssertFalse(AnimationEasing.validateElasticParameters(amplitude: -0.1, period: 0.5))
         XCTAssertFalse(AnimationEasing.validateElasticParameters(amplitude: 2.1, period: 0.5))

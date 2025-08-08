@@ -38,17 +38,17 @@ enum AnimationInterpolator {
     /// Apply CAMediaTimingFunction-based easing to progress
     static func applyTimingFunction(_ progress: Double, timingFunction: CAMediaTimingFunction) -> Double {
         let clampedProgress = max(0.0, min(1.0, progress))
-        
+
         // CAMediaTimingFunction uses cubic bezier curves with control points
         // For timing functions, we need to solve for Y given X (progress)
         // This requires iterative solving since we can't directly invert the bezier curve
-        
+
         // Get control points for the timing function
         var cp1 = [Float](repeating: 0, count: 2)
         var cp2 = [Float](repeating: 0, count: 2)
         timingFunction.getControlPoint(at: 1, values: &cp1)
         timingFunction.getControlPoint(at: 2, values: &cp2)
-        
+
         // For standard timing functions, use optimized calculations
         // This avoids the complexity of bezier curve solving
         return evaluateTimingFunctionOptimized(progress: clampedProgress, cp1: cp1, cp2: cp2)
@@ -60,10 +60,10 @@ enum AnimationInterpolator {
         let y1 = Double(cp1[1])
         let x2 = Double(cp2[0])
         let y2 = Double(cp2[1])
-        
+
         // For standard easing functions, we can use approximations that are very close
         // to the actual bezier curve evaluation but much faster
-        
+
         // Check if this matches standard timing functions (with some tolerance)
         if abs(x1 - 0.0) < 0.001 && abs(y1 - 0.0) < 0.001 && abs(x2 - 1.0) < 0.001 && abs(y2 - 1.0) < 0.001 {
             // Linear
@@ -82,7 +82,7 @@ enum AnimationInterpolator {
                 return 1.0 - 2.0 * (1.0 - progress) * (1.0 - progress)
             }
         }
-        
+
         // For custom timing functions, use bezier approximation
         return evaluateCubicBezierApproximation(t: progress, x1: x1, y1: y1, x2: x2, y2: y2)
     }
@@ -95,7 +95,7 @@ enum AnimationInterpolator {
         let t3 = t2 * t
         let mt = 1.0 - t
         let mt2 = mt * mt
-        
+
         // Cubic bezier with control points (0,0), (x1,y1), (x2,y2), (1,1)
         return 3 * mt2 * t * y1 + 3 * mt * t2 * y2 + t3
     }
@@ -125,12 +125,12 @@ enum AnimationInterpolator {
             return 1.0 - 2.0 * (1.0 - progress) * (1.0 - progress)
         }
     }
-    
+
     /// Bounce easing with configurable intensity
     static func bounce(_ progress: Double, intensity: Float) -> Double {
         let clampedProgress = max(0.0, min(1.0, progress))
         let intensityFactor = Double(intensity)
-        
+
         // Handle edge cases
         if clampedProgress == 0.0 {
             return 0.0
@@ -138,15 +138,15 @@ enum AnimationInterpolator {
         if clampedProgress == 1.0 {
             return 1.0
         }
-        
+
         // Bounce easing implementation
         // Based on Robert Penner's easing equations with configurable intensity
         let n1 = 7.5625
         let d1 = 2.75
         let scaledIntensity = 1.0 + (intensityFactor - 1.0) * 0.5 // Scale intensity effect
-        
+
         var result: Double
-        
+
         if clampedProgress < 1.0 / d1 {
             result = n1 * clampedProgress * clampedProgress
         } else if clampedProgress < 2.0 / d1 {
@@ -159,23 +159,23 @@ enum AnimationInterpolator {
             let adjustedProgress = clampedProgress - 2.625 / d1
             result = n1 * adjustedProgress * adjustedProgress + 0.984375
         }
-        
+
         // Apply intensity scaling
         if intensityFactor != 1.0 {
             // Enhance the bounce effect by scaling the overshoot
             let overshoot = result - clampedProgress
             result = clampedProgress + overshoot * scaledIntensity
         }
-        
+
         return result
     }
-    
+
     /// Elastic easing with configurable amplitude and period
     static func elastic(_ progress: Double, amplitude: Float, period: Float) -> Double {
         let clampedProgress = max(0.0, min(1.0, progress))
         let amplitudeFactor = Double(amplitude)
         let periodFactor = Double(period)
-        
+
         // Handle edge cases
         if clampedProgress == 0.0 {
             return 0.0
@@ -183,20 +183,20 @@ enum AnimationInterpolator {
         if clampedProgress == 1.0 {
             return 1.0
         }
-        
+
         // Elastic easing implementation
         // Based on Robert Penner's easing equations with configurable parameters
         let c4 = (2.0 * Double.pi) / periodFactor
-        
+
         let result = -amplitudeFactor * pow(2.0, 10.0 * (clampedProgress - 1.0)) * sin((clampedProgress - 1.0) * c4) + 1.0
-        
+
         return result
     }
-    
+
     /// Spring physics easing with damping and initial velocity
     static func spring(_ progress: Double, damping: Float, velocity: Float) -> Double {
         let clampedProgress = max(0.0, min(1.0, progress))
-        
+
         // Handle edge cases
         if clampedProgress == 0.0 {
             return 0.0
@@ -204,51 +204,51 @@ enum AnimationInterpolator {
         if clampedProgress == 1.0 {
             return 1.0
         }
-        
+
         // Convert parameters to spring physics constants
         let dampingRatio = Double(damping)
         let initialVelocity = Double(velocity)
-        
+
         // Spring physics calculation for animation easing
         // We want to go from 0 to 1, so we solve for displacement from equilibrium
         // Using normalized time (progress) from 0 to 1
-        
+
         let omega = 8.0 // Natural frequency (affects animation speed)
         let zeta = dampingRatio // Damping ratio
         let t = clampedProgress // Normalized time
-        
+
         if zeta > 1.0 {
             // Overdamped - no oscillation, smooth approach to target
             let discriminant = sqrt(zeta * zeta - 1.0)
             let r1 = -omega * (zeta + discriminant)
             let r2 = -omega * (zeta - discriminant)
-            
+
             // Initial conditions: x(0) = 0, x'(0) = initialVelocity
             let c2 = initialVelocity / (omega * (r1 - r2))
             let c1 = -c2
-            
+
             let result = 1.0 + c1 * exp(r1 * t) + c2 * exp(r2 * t)
             return max(0.0, min(2.0, result)) // Allow slight overshoot but clamp extremes
-            
+
         } else if zeta == 1.0 {
             // Critically damped - fastest approach without oscillation
             let c1 = -1.0
             let c2 = initialVelocity - omega * c1
-            
+
             let result = 1.0 + (c1 + c2 * t) * exp(-omega * t)
             return max(0.0, min(2.0, result))
-            
+
         } else {
             // Underdamped - oscillatory behavior
             let omegaD = omega * sqrt(1.0 - zeta * zeta) // Damped frequency
-            
+
             // Initial conditions: x(0) = 0, x'(0) = initialVelocity
             let A = 1.0 / omegaD
             let phi = atan2(initialVelocity + zeta * omega, omegaD)
-            
+
             let envelope = exp(-zeta * omega * t)
             let oscillation = sin(omegaD * t + phi)
-            
+
             let result = 1.0 - A * envelope * oscillation
             return result // Allow overshoot for spring effect
         }
@@ -287,14 +287,14 @@ enum AnimationInterpolator {
     /// Get easing function for the given easing type (uses CAMediaTimingFunction by default)
     static func easingFunction(for easing: AnimationEasing) -> (Double) -> Double {
         switch easing {
-        case .spring, .bounce, .elastic:
-            // These animations use manual calculation since CAMediaTimingFunction doesn't support them
-            return manualEasingFunction(for: easing)
-        default:
-            let timingFunc = timingFunction(for: easing)
-            return { progress in
-                applyTimingFunction(progress, timingFunction: timingFunc)
-            }
+            case .spring, .bounce, .elastic:
+                // These animations use manual calculation since CAMediaTimingFunction doesn't support them
+                return manualEasingFunction(for: easing)
+            default:
+                let timingFunc = timingFunction(for: easing)
+                return { progress in
+                    applyTimingFunction(progress, timingFunction: timingFunc)
+                }
         }
     }
 
@@ -389,29 +389,29 @@ enum AnimationInterpolator {
         let timingFunctionTime: TimeInterval
         let iterations: Int
         let easingType: AnimationEasing
-        
+
         var speedupFactor: Double {
             return manualEasingTime / timingFunctionTime
         }
-        
+
         var description: String {
             return """
-            Easing Performance Benchmark (\(easingType.rawValue)):
-            - Manual easing: \(String(format: "%.6f", manualEasingTime))s
-            - CAMediaTimingFunction: \(String(format: "%.6f", timingFunctionTime))s
-            - Iterations: \(iterations)
-            - Speedup factor: \(String(format: "%.2f", speedupFactor))x
-            """
+                Easing Performance Benchmark (\(easingType.rawValue)):
+                - Manual easing: \(String(format: "%.6f", manualEasingTime))s
+                - CAMediaTimingFunction: \(String(format: "%.6f", timingFunctionTime))s
+                - Iterations: \(iterations)
+                - Speedup factor: \(String(format: "%.2f", speedupFactor))x
+                """
         }
     }
 
     /// Benchmark performance comparison between manual and CAMediaTimingFunction easing
     static func benchmarkEasingPerformance(
         easing: AnimationEasing,
-        iterations: Int = 10000
+        iterations: Int = 10000,
     ) -> EasingPerformanceBenchmark {
-        let progressValues = (0..<iterations).map { Double($0) / Double(iterations - 1) }
-        
+        let progressValues = (0 ..< iterations).map { Double($0) / Double(iterations - 1) }
+
         // Benchmark manual easing
         let manualStartTime = CFAbsoluteTimeGetCurrent()
         for progress in progressValues {
@@ -419,7 +419,7 @@ enum AnimationInterpolator {
         }
         let manualEndTime = CFAbsoluteTimeGetCurrent()
         let manualEasingTime = manualEndTime - manualStartTime
-        
+
         // Benchmark CAMediaTimingFunction easing
         let timingFuncStartTime = CFAbsoluteTimeGetCurrent()
         let timingFunc = timingFunction(for: easing)
@@ -428,12 +428,12 @@ enum AnimationInterpolator {
         }
         let timingFuncEndTime = CFAbsoluteTimeGetCurrent()
         let timingFunctionTime = timingFuncEndTime - timingFuncStartTime
-        
+
         return EasingPerformanceBenchmark(
             manualEasingTime: manualEasingTime,
             timingFunctionTime: timingFunctionTime,
             iterations: iterations,
-            easingType: easing
+            easingType: easing,
         )
     }
 

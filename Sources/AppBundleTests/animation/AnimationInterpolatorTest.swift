@@ -49,16 +49,16 @@ class AnimationInterpolatorTest: XCTestCase {
         // Test basic spring behavior with moderate damping
         let damping: Float = 0.8
         let velocity: Float = 0.0
-        
+
         // Spring should start at 0 and end at 1
         XCTAssertEqual(AnimationInterpolator.spring(0.0, damping: damping, velocity: velocity), 0.0, accuracy: 0.001)
         XCTAssertEqual(AnimationInterpolator.spring(1.0, damping: damping, velocity: velocity), 1.0, accuracy: 0.01)
-        
+
         // Spring should be monotonic for overdamped case
         let progress25 = AnimationInterpolator.spring(0.25, damping: damping, velocity: velocity)
         let progress50 = AnimationInterpolator.spring(0.5, damping: damping, velocity: velocity)
         let progress75 = AnimationInterpolator.spring(0.75, damping: damping, velocity: velocity)
-        
+
         XCTAssertGreaterThan(progress25, 0.0)
         XCTAssertGreaterThan(progress50, progress25)
         XCTAssertGreaterThan(progress75, progress50)
@@ -69,11 +69,11 @@ class AnimationInterpolatorTest: XCTestCase {
         // Test underdamped spring (oscillatory behavior)
         let damping: Float = 0.3
         let velocity: Float = 0.0
-        
+
         // Should still start at 0 and end at 1
         XCTAssertEqual(AnimationInterpolator.spring(0.0, damping: damping, velocity: velocity), 0.0, accuracy: 0.001)
         XCTAssertEqual(AnimationInterpolator.spring(1.0, damping: damping, velocity: velocity), 1.0, accuracy: 0.1)
-        
+
         // Underdamped spring may overshoot
         let midProgress = AnimationInterpolator.spring(0.5, damping: damping, velocity: velocity)
         XCTAssertGreaterThan(midProgress, 0.0)
@@ -84,17 +84,17 @@ class AnimationInterpolatorTest: XCTestCase {
         // Test overdamped spring (no oscillation)
         let damping: Float = 1.5
         let velocity: Float = 0.0
-        
+
         // Should be monotonic and smooth
         XCTAssertEqual(AnimationInterpolator.spring(0.0, damping: damping, velocity: velocity), 0.0, accuracy: 0.001)
         XCTAssertEqual(AnimationInterpolator.spring(1.0, damping: damping, velocity: velocity), 1.0, accuracy: 0.01)
-        
+
         // Should be monotonic
         let values = [0.0, 0.25, 0.5, 0.75, 1.0]
         let results = values.map { AnimationInterpolator.spring($0, damping: damping, velocity: velocity) }
-        
-        for i in 1..<results.count {
-            XCTAssertGreaterThanOrEqual(results[i], results[i-1], "Overdamped spring should be monotonic")
+
+        for i in 1 ..< results.count {
+            XCTAssertGreaterThanOrEqual(results[i], results[i - 1], "Overdamped spring should be monotonic")
         }
     }
 
@@ -103,16 +103,16 @@ class AnimationInterpolatorTest: XCTestCase {
         let damping: Float = 0.8
         let positiveVelocity: Float = 2.0
         let negativeVelocity: Float = -2.0
-        
+
         // With positive velocity, should start faster
         let posVel25 = AnimationInterpolator.spring(0.25, damping: damping, velocity: positiveVelocity)
         let noVel25 = AnimationInterpolator.spring(0.25, damping: damping, velocity: 0.0)
         XCTAssertGreaterThan(posVel25, noVel25)
-        
+
         // With negative velocity, should start slower
         let negVel25 = AnimationInterpolator.spring(0.25, damping: damping, velocity: negativeVelocity)
         XCTAssertLessThan(negVel25, noVel25)
-        
+
         // All should end at 1.0
         XCTAssertEqual(AnimationInterpolator.spring(1.0, damping: damping, velocity: positiveVelocity), 1.0, accuracy: 0.01)
         XCTAssertEqual(AnimationInterpolator.spring(1.0, damping: damping, velocity: negativeVelocity), 1.0, accuracy: 0.01)
@@ -123,7 +123,7 @@ class AnimationInterpolatorTest: XCTestCase {
         XCTAssertTrue(AnimationEasing.validateSpringParameters(damping: 0.0, velocity: 0.0))
         XCTAssertTrue(AnimationEasing.validateSpringParameters(damping: 1.0, velocity: 5.0))
         XCTAssertTrue(AnimationEasing.validateSpringParameters(damping: 2.0, velocity: -5.0))
-        
+
         // Invalid parameters
         XCTAssertFalse(AnimationEasing.validateSpringParameters(damping: -0.1, velocity: 0.0))
         XCTAssertFalse(AnimationEasing.validateSpringParameters(damping: 2.1, velocity: 0.0))
@@ -138,12 +138,12 @@ class AnimationInterpolatorTest: XCTestCase {
             ("spring(1.0, 2.0)", AnimationEasing.spring(damping: 1.0, velocity: 2.0)),
             ("spring(0.5, -1.5)", AnimationEasing.spring(damping: 0.5, velocity: -1.5)),
         ]
-        
+
         for (input, expected) in validCases {
             let result = AnimationEasing.from(string: input)
             XCTAssertEqual(result, expected, "Failed to parse: \(input)")
         }
-        
+
         // Invalid strings
         XCTAssertNil(AnimationEasing.from(string: "spring(0.8)")) // Missing parameter
         XCTAssertNil(AnimationEasing.from(string: "spring(2.5, 0.0)")) // Invalid damping
@@ -161,16 +161,16 @@ class AnimationInterpolatorTest: XCTestCase {
     func testBounceEasing() {
         // Test basic bounce behavior with moderate intensity
         let intensity: Float = 1.0
-        
+
         // Bounce should start at 0 and end at 1
         XCTAssertEqual(AnimationInterpolator.bounce(0.0, intensity: intensity), 0.0, accuracy: 0.001)
         XCTAssertEqual(AnimationInterpolator.bounce(1.0, intensity: intensity), 1.0, accuracy: 0.001)
-        
+
         // Bounce should have characteristic bouncing behavior
         let progress25 = AnimationInterpolator.bounce(0.25, intensity: intensity)
         let progress50 = AnimationInterpolator.bounce(0.5, intensity: intensity)
         let progress75 = AnimationInterpolator.bounce(0.75, intensity: intensity)
-        
+
         XCTAssertGreaterThan(progress25, 0.0)
         XCTAssertGreaterThan(progress50, progress25)
         XCTAssertGreaterThan(progress75, progress50)
@@ -179,16 +179,16 @@ class AnimationInterpolatorTest: XCTestCase {
 
     func testBounceEasingIntensityVariations() {
         let testProgress = 0.8
-        
+
         // Test different intensities
         let lowIntensity = AnimationInterpolator.bounce(testProgress, intensity: 0.5)
         let mediumIntensity = AnimationInterpolator.bounce(testProgress, intensity: 1.0)
         let highIntensity = AnimationInterpolator.bounce(testProgress, intensity: 2.0)
-        
+
         // Higher intensity should generally produce more pronounced effects
         XCTAssertGreaterThan(mediumIntensity, 0.0)
         XCTAssertGreaterThan(highIntensity, 0.0)
-        
+
         // All should be reasonable values
         XCTAssertLessThan(lowIntensity, 1.5)
         XCTAssertLessThan(mediumIntensity, 1.5)
@@ -200,7 +200,7 @@ class AnimationInterpolatorTest: XCTestCase {
         XCTAssertTrue(AnimationEasing.validateBounceParameters(intensity: 0.0))
         XCTAssertTrue(AnimationEasing.validateBounceParameters(intensity: 1.0))
         XCTAssertTrue(AnimationEasing.validateBounceParameters(intensity: 3.0))
-        
+
         // Invalid parameters
         XCTAssertFalse(AnimationEasing.validateBounceParameters(intensity: -0.1))
         XCTAssertFalse(AnimationEasing.validateBounceParameters(intensity: 3.1))
@@ -213,12 +213,12 @@ class AnimationInterpolatorTest: XCTestCase {
             ("bounce(1.0)", AnimationEasing.bounce(intensity: 1.0)),
             ("bounce(2.5)", AnimationEasing.bounce(intensity: 2.5)),
         ]
-        
+
         for (input, expected) in validCases {
             let result = AnimationEasing.from(string: input)
             XCTAssertEqual(result, expected, "Failed to parse: \(input)")
         }
-        
+
         // Invalid strings
         XCTAssertNil(AnimationEasing.from(string: "bounce()")) // Missing parameter
         XCTAssertNil(AnimationEasing.from(string: "bounce(3.5)")) // Invalid intensity
@@ -237,16 +237,16 @@ class AnimationInterpolatorTest: XCTestCase {
         // Test basic elastic behavior with moderate parameters
         let amplitude: Float = 0.5
         let period: Float = 0.3
-        
+
         // Elastic should start at 0 and end at 1
         XCTAssertEqual(AnimationInterpolator.elastic(0.0, amplitude: amplitude, period: period), 0.0, accuracy: 0.001)
         XCTAssertEqual(AnimationInterpolator.elastic(1.0, amplitude: amplitude, period: period), 1.0, accuracy: 0.001)
-        
+
         // Elastic should have oscillatory behavior
         let progress25 = AnimationInterpolator.elastic(0.25, amplitude: amplitude, period: period)
         let progress50 = AnimationInterpolator.elastic(0.5, amplitude: amplitude, period: period)
         let progress75 = AnimationInterpolator.elastic(0.75, amplitude: amplitude, period: period)
-        
+
         // Values should be reasonable (may overshoot due to elastic nature)
         XCTAssertGreaterThan(progress25, -0.5)
         XCTAssertLessThan(progress25, 1.5)
@@ -258,15 +258,15 @@ class AnimationInterpolatorTest: XCTestCase {
 
     func testElasticEasingParameterVariations() {
         let testProgress = 0.7
-        
+
         // Test different amplitudes
         let lowAmplitude = AnimationInterpolator.elastic(testProgress, amplitude: 0.2, period: 0.3)
         let highAmplitude = AnimationInterpolator.elastic(testProgress, amplitude: 1.0, period: 0.3)
-        
+
         // Test different periods
         let shortPeriod = AnimationInterpolator.elastic(testProgress, amplitude: 0.5, period: 0.1)
         let longPeriod = AnimationInterpolator.elastic(testProgress, amplitude: 0.5, period: 0.8)
-        
+
         // All should produce reasonable values
         XCTAssertGreaterThan(lowAmplitude, -1.0)
         XCTAssertLessThan(lowAmplitude, 2.0)
@@ -283,7 +283,7 @@ class AnimationInterpolatorTest: XCTestCase {
         XCTAssertTrue(AnimationEasing.validateElasticParameters(amplitude: 0.0, period: 0.1))
         XCTAssertTrue(AnimationEasing.validateElasticParameters(amplitude: 1.0, period: 0.5))
         XCTAssertTrue(AnimationEasing.validateElasticParameters(amplitude: 2.0, period: 1.0))
-        
+
         // Invalid parameters
         XCTAssertFalse(AnimationEasing.validateElasticParameters(amplitude: -0.1, period: 0.5))
         XCTAssertFalse(AnimationEasing.validateElasticParameters(amplitude: 2.1, period: 0.5))
@@ -298,12 +298,12 @@ class AnimationInterpolatorTest: XCTestCase {
             ("elastic(1.0, 0.2)", AnimationEasing.elastic(amplitude: 1.0, period: 0.2)),
             ("elastic(0.8, 0.8)", AnimationEasing.elastic(amplitude: 0.8, period: 0.8)),
         ]
-        
+
         for (input, expected) in validCases {
             let result = AnimationEasing.from(string: input)
             XCTAssertEqual(result, expected, "Failed to parse: \(input)")
         }
-        
+
         // Invalid strings
         XCTAssertNil(AnimationEasing.from(string: "elastic(0.5)")) // Missing parameter
         XCTAssertNil(AnimationEasing.from(string: "elastic(2.5, 0.3)")) // Invalid amplitude
@@ -329,17 +329,17 @@ class AnimationInterpolatorTest: XCTestCase {
         XCTAssertEqual(easeInFunc(0.5), 0.25, accuracy: 0.01)
         XCTAssertEqual(easeOutFunc(0.5), 0.75, accuracy: 0.01)
         XCTAssertEqual(easeInOutFunc(0.5), 0.5, accuracy: 0.01)
-        
+
         // Spring function should produce reasonable values
         let springResult = springFunc(0.5)
         XCTAssertGreaterThan(springResult, 0.0)
         XCTAssertLessThan(springResult, 1.5) // Allow for some overshoot
-        
+
         // Bounce function should produce reasonable values
         let bounceResult = bounceFunc(0.5)
         XCTAssertGreaterThan(bounceResult, 0.0)
         XCTAssertLessThan(bounceResult, 1.5) // Allow for some overshoot
-        
+
         // Elastic function should produce reasonable values
         let elasticResult = elasticFunc(0.5)
         XCTAssertGreaterThan(elasticResult, -1.0) // Allow for undershoot
@@ -359,17 +359,17 @@ class AnimationInterpolatorTest: XCTestCase {
         XCTAssertEqual(easeInFunc(0.5), 0.25, accuracy: 0.001)
         XCTAssertEqual(easeOutFunc(0.5), 0.75, accuracy: 0.001)
         XCTAssertEqual(easeInOutFunc(0.5), 0.5, accuracy: 0.001)
-        
+
         // Spring function should produce reasonable values
         let springResult = springFunc(0.5)
         XCTAssertGreaterThan(springResult, 0.0)
         XCTAssertLessThan(springResult, 1.5) // Allow for some overshoot
-        
+
         // Bounce function should produce reasonable values
         let bounceResult = bounceFunc(0.5)
         XCTAssertGreaterThan(bounceResult, 0.0)
         XCTAssertLessThan(bounceResult, 1.5) // Allow for some overshoot
-        
+
         // Elastic function should produce reasonable values
         let elasticResult = elasticFunc(0.5)
         XCTAssertGreaterThan(elasticResult, -1.0) // Allow for undershoot
@@ -623,7 +623,7 @@ class AnimationInterpolatorTest: XCTestCase {
 
                 // Allow for some difference due to different calculation methods
                 XCTAssertEqual(manualResult, timingFunctionResult, accuracy: 0.05,
-                              "Mismatch for \(easing.rawValue) at progress \(progress)")
+                               "Mismatch for \(easing.rawValue) at progress \(progress)")
             }
         }
     }
@@ -679,14 +679,14 @@ class AnimationInterpolatorTest: XCTestCase {
     func testCustomBezierCurveCreation() {
         let customEasing = AnimationEasing.custom(x1: 0.25, y1: 0.1, x2: 0.75, y2: 0.9)
         let timingFunction = AnimationInterpolator.timingFunction(for: customEasing)
-        
+
         XCTAssertNotNil(timingFunction)
-        
+
         // Test that the timing function produces reasonable values
         let result0 = AnimationInterpolator.applyTimingFunction(0.0, timingFunction: timingFunction)
         let result50 = AnimationInterpolator.applyTimingFunction(0.5, timingFunction: timingFunction)
         let result100 = AnimationInterpolator.applyTimingFunction(1.0, timingFunction: timingFunction)
-        
+
         XCTAssertEqual(result0, 0.0, accuracy: 0.01)
         XCTAssertEqual(result100, 1.0, accuracy: 0.01)
         XCTAssertGreaterThan(result50, 0.0)
@@ -698,10 +698,10 @@ class AnimationInterpolatorTest: XCTestCase {
         XCTAssertTrue(AnimationEasing.validateBezierParameters(x1: 0.0, y1: 0.0, x2: 1.0, y2: 1.0))
         XCTAssertTrue(AnimationEasing.validateBezierParameters(x1: 0.25, y1: 0.1, x2: 0.75, y2: 0.9))
         XCTAssertTrue(AnimationEasing.validateBezierParameters(x1: 0.42, y1: 0.0, x2: 0.58, y2: 1.0))
-        
+
         // Y values can be outside [0, 1] for overshoot effects
         XCTAssertTrue(AnimationEasing.validateBezierParameters(x1: 0.5, y1: -0.5, x2: 0.5, y2: 1.5))
-        
+
         // Invalid X parameters (outside [0, 1])
         XCTAssertFalse(AnimationEasing.validateBezierParameters(x1: -0.1, y1: 0.0, x2: 1.0, y2: 1.0))
         XCTAssertFalse(AnimationEasing.validateBezierParameters(x1: 0.0, y1: 0.0, x2: 1.1, y2: 1.0))
@@ -716,18 +716,18 @@ class AnimationInterpolatorTest: XCTestCase {
             ("cubic-bezier(0, 0, 1, 1)", AnimationEasing.custom(x1: 0.0, y1: 0.0, x2: 1.0, y2: 1.0)),
             ("cubic-bezier(0.5, -0.5, 0.5, 1.5)", AnimationEasing.custom(x1: 0.5, y1: -0.5, x2: 0.5, y2: 1.5)),
         ]
-        
+
         for (input, expected) in validCases {
             let result = AnimationEasing.from(string: input)
             XCTAssertEqual(result, expected, "Failed to parse: \(input)")
         }
-        
+
         // Standard easing strings
         XCTAssertEqual(AnimationEasing.from(string: "linear"), .linear)
         XCTAssertEqual(AnimationEasing.from(string: "ease-in"), .easeIn)
         XCTAssertEqual(AnimationEasing.from(string: "ease-out"), .easeOut)
         XCTAssertEqual(AnimationEasing.from(string: "ease-in-out"), .easeInOut)
-        
+
         // Invalid strings
         XCTAssertNil(AnimationEasing.from(string: "invalid"))
         XCTAssertNil(AnimationEasing.from(string: "cubic-bezier(0.25, 0.1, 0.75)")) // Missing parameter
@@ -738,7 +738,7 @@ class AnimationInterpolatorTest: XCTestCase {
     func testCustomBezierCurveRawValue() {
         let customEasing = AnimationEasing.custom(x1: 0.25, y1: 0.1, x2: 0.75, y2: 0.9)
         XCTAssertEqual(customEasing.rawValue, "cubic-bezier(0.25, 0.1, 0.75, 0.9)")
-        
+
         let standardEasing = AnimationEasing.linear
         XCTAssertEqual(standardEasing.rawValue, "linear")
     }
@@ -746,7 +746,7 @@ class AnimationInterpolatorTest: XCTestCase {
     func testCustomBezierCurvePerformanceBenchmark() {
         let customEasing = AnimationEasing.custom(x1: 0.25, y1: 0.1, x2: 0.75, y2: 0.9)
         let benchmark = AnimationInterpolator.benchmarkEasingPerformance(easing: customEasing, iterations: 1000)
-        
+
         XCTAssertEqual(benchmark.easingType, customEasing)
         XCTAssertEqual(benchmark.iterations, 1000)
         XCTAssertGreaterThan(benchmark.manualEasingTime, 0)
@@ -756,36 +756,36 @@ class AnimationInterpolatorTest: XCTestCase {
 
     func testCustomBezierCurveAccuracy() {
         let customEasing = AnimationEasing.custom(x1: 0.25, y1: 0.1, x2: 0.75, y2: 0.9)
-        
+
         // Test boundary values
         XCTAssertEqual(AnimationInterpolator.applyEasing(0.0, easing: customEasing), 0.0, accuracy: 0.01)
         XCTAssertEqual(AnimationInterpolator.applyEasing(1.0, easing: customEasing), 1.0, accuracy: 0.01)
-        
+
         // Test intermediate values are reasonable
         let midResult = AnimationInterpolator.applyEasing(0.5, easing: customEasing)
         XCTAssertGreaterThan(midResult, 0.0)
         XCTAssertLessThan(midResult, 1.0)
-        
+
         // Test monotonicity (for valid timing functions)
         let values = [0.0, 0.25, 0.5, 0.75, 1.0]
         let results = values.map { AnimationInterpolator.applyEasing($0, easing: customEasing) }
-        
-        for i in 1..<results.count {
-            XCTAssertGreaterThanOrEqual(results[i], results[i-1], "Custom bezier curve should be monotonic")
+
+        for i in 1 ..< results.count {
+            XCTAssertGreaterThanOrEqual(results[i], results[i - 1], "Custom bezier curve should be monotonic")
         }
     }
 
     func testCustomBezierCurveManualVsTimingFunctionConsistency() {
         let customEasing = AnimationEasing.custom(x1: 0.25, y1: 0.1, x2: 0.75, y2: 0.9)
         let testValues = [0.0, 0.25, 0.5, 0.75, 1.0]
-        
+
         for progress in testValues {
             let manualResult = AnimationInterpolator.applyManualEasing(progress, easing: customEasing)
             let timingFunctionResult = AnimationInterpolator.applyEasing(progress, easing: customEasing)
-            
+
             // Allow for some difference due to different calculation methods
             XCTAssertEqual(manualResult, timingFunctionResult, accuracy: 0.1,
-                          "Mismatch for custom bezier at progress \(progress)")
+                           "Mismatch for custom bezier at progress \(progress)")
         }
     }
 

@@ -208,20 +208,20 @@
   - Write performance tests for batched vs individual animation processing
   - _Requirements: 9.3, 9.4_
 
-- [ ] 10. Implement visual effects engine for exciting animation features
+- [x] 10. Implement visual effects engine for exciting animation features
   - Create VisualEffectsEngine for advanced visual effects
   - Add motion blur and afterimage trail effects for fast window movements
   - Implement particle effects and ripple animations for multi-window operations
   - _Requirements: 10.1, 10.2, 10.3_
 
-- [ ] 10.1 Create motion blur and afterimage effects
+- [x] 10.1 Create motion blur and afterimage effects
   - Implement motion blur rendering for fast-moving windows
   - Create afterimage trail system with configurable length and opacity
   - Add velocity detection to automatically trigger motion effects
   - Write tests for motion effect accuracy and performance
   - _Requirements: 10.1_
 
-- [ ] 10.2 Add particle and ripple effects
+- [x] 10.2 Add particle and ripple effects
   - Implement particle system for window interaction feedback
   - Create ripple effects for multi-window operations
   - Add configurable particle types (spark, bubble, star, geometric)
