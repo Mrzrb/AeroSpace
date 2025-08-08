@@ -515,6 +515,7 @@ private let particleConfigParser: [String: any ParserProtocol<VisualEffectsConfi
     "duration": Parser(\.particleEffectDuration, parseTimeInterval),
     "spread": Parser(\.particleSpread, parseDouble),
     "velocity": Parser(\.particleVelocity, parseDouble),
+    "available-types": Parser(\.availableParticleTypes, parseParticleTypeArray),
     "default-type": Parser(\.defaultParticleType, parseParticleType),
 ]
 
@@ -624,5 +625,14 @@ private func parseParticleType(_ raw: TOMLValueConvertible, _ backtrace: TomlBac
     parseString(raw, backtrace).flatMap { str in
         ParticleType(rawValue: str)
             .orFailure(.semantic(backtrace, "Invalid particle type '\(str)'. Expected one of: \(ParticleType.allCases.map(\.rawValue).joined(separator: ", "))"))
+    }
+}
+
+private func parseParticleTypeArray(_ raw: TOMLValueConvertible, _ backtrace: TomlBacktrace) -> ParsedToml<[ParticleType]> {
+    parseTomlArray(raw, backtrace).flatMap { array in
+        array.enumerated().mapAllOrFailure { (index, element) in
+            let elementBacktrace = backtrace + .index(index)
+            return parseParticleType(element, elementBacktrace)
+        }
     }
 }
