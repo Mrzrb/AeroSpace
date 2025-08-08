@@ -57,6 +57,14 @@ class WindowAnimationEngine {
 
     // Accessibility integration
     private var originalConfigEnabled: Bool = true // Track original enabled state
+    
+    // Hardware acceleration
+    private var hardwareAccelerationStatus: HardwareAcceleration.AccelerationStatus = .unavailable(reason: "Not initialized")
+    private var lastHardwareCheck: Date = Date()
+    private let hardwareCheckInterval: TimeInterval = 5.0 // Check every 5 seconds
+    
+    // Batch processing
+    private var batchProcessor: AnimationBatchProcessor?
 
     // MARK: - Singleton
 
@@ -70,11 +78,14 @@ class WindowAnimationEngine {
         setupMultiDisplayLinks()
         detectDisplayRefreshRate()
         initializeAnimationContextPool()
+        initializeHardwareAcceleration()
+        initializeBatchProcessor()
     }
 
     deinit {
         NotificationCenter.default.removeObserver(self)
-        // CVDisplayLink cleanup will be handled by the system when the object is deallocated
+        // Note: Cleanup will be handled by the system when the object is deallocated
+        // We cannot safely call async methods in deinit
     }
 
     // MARK: - Configuration
@@ -810,6 +821,92 @@ class WindowAnimationEngine {
     /// Clean up the animation context pool
     private func cleanupAnimationContextPool() {
         animationContextPool.removeAll()
+    }
+    
+    // MARK: - Hardware Acceleration
+    
+    /// Initialize hardware acceleration detection
+    private func initializeHardwareAcceleration() {
+        hardwareAccelerationStatus = HardwareAcceleration.detectCapabilities()
+        lastHardwareCheck = Date()
+        
+        switch hardwareAccelerationStatus {
+        case .available(let gpuInfo):
+            print("Hardware acceleration initialized: \(gpuInfo.name)")
+        case .unavailable(let reason):
+            print("Hardware acceleration unavailable: \(reason)")
+        case .disabled(let reason):
+            print("Hardware acceleration disabled: \(reason)")
+        }
+    }
+    
+    /// Check if hardware acceleration should be used for current conditions
+    private func shouldUseHardwareAcceleration() -> Bool {
+        // Check configuration settings
+        guard config.gpuAccelerationEnabled else { return false }
+        
+        switch config.gpuAccelerationMode {
+        case .disabled:
+            return false
+        case .forced:
+            return HardwareAcceleration.isAvailable
+        case .automatic:
+            // Periodic hardware capability check
+            let now = Date()
+            if now.timeIntervalSince(lastHardwareCheck) > hardwareCheckInterval {
+                hardwareAccelerationStatus = HardwareAcceleration.detectCapabilities()
+                lastHardwareCheck = now
+            }
+            
+            return HardwareAcceleration.shouldUseAcceleration
+        }
+    }
+    
+    /// Get current hardware acceleration status
+    var hardwareAccelerationInfo: (status: HardwareAcceleration.AccelerationStatus, resourceInfo: HardwareAcceleration.ResourceInfo?) {
+        return (hardwareAccelerationStatus, HardwareAcceleration.getResourceInfo())
+    }
+    
+    /// Get recommended batch size for current hardware conditions
+    private func getRecommendedBatchSize() -> Int {
+        if shouldUseHardwareAcceleration() {
+            return min(config.gpuBatchSize, HardwareAcceleration.recommendedBatchSize)
+        } else {
+            // CPU-based batching should use smaller batches
+            return min(config.gpuBatchSize / 4, 8)
+        }
+    }
+    
+    /// Initialize batch processor
+    private func initializeBatchProcessor() {
+        batchProcessor = AnimationBatchProcessor()
+        print("Animation batch processor initialized")
+    }
+    
+    /// Process multiple animations using batch processing
+    private func processBatchedAnimations(_ contexts: [WindowAnimationContext]) async -> [Rect] {
+        guard let processor = batchProcessor else {
+            // Fallback to individual processing
+            return contexts.compactMap { $0.getCurrentRect() }
+        }
+        
+        // Convert animation contexts to batched animations
+        let batchedAnimations = contexts.map { context in
+            AnimationBatchProcessor.BatchedAnimation(
+                windowId: context.windowId,
+                sourceRect: context.sourceRect,
+                targetRect: context.targetRect,
+                progress: context.currentProgress,
+                easing: context.easingFunction
+            )
+        }
+        
+        return await processor.processBatch(batchedAnimations)
+    }
+    
+    /// Get batch processing performance metrics
+    func getBatchProcessingMetrics() -> AnimationBatchProcessor.BatchPerformanceMetrics? {
+        return batchProcessor?.getPerformanceMetrics()
     }
 
     // MARK: - Animation Batching

@@ -168,40 +168,40 @@
   - Write tests for custom timing function accuracy
   - _Requirements: 8.3, 8.4_
 
-- [ ] 8. Implement advanced easing functions
+- [-] 8. Implement advanced easing functions
   - Add spring-based easing with configurable damping and velocity
   - Implement bounce and elastic easing functions
   - Create configuration options for advanced easing parameters
   - _Requirements: 8.1, 8.2, 8.3_
 
-- [ ] 8.1 Implement spring physics easing
+- [x] 8.1 Implement spring physics easing
   - Create spring-based easing function with damping and velocity parameters
   - Add spring configuration options to AnimationConfig
   - Implement spring parameter validation and sensible defaults
   - Write tests for spring animation behavior and parameter effects
   - _Requirements: 8.1, 8.3_
 
-- [ ] 8.2 Add bounce and elastic easing functions
+- [x] 8.2 Add bounce and elastic easing functions
   - Implement bounce easing with configurable intensity
   - Create elastic easing with amplitude and period parameters
   - Add bounce and elastic configuration to TOML parsing
   - Write tests for bounce and elastic animation characteristics
   - _Requirements: 8.2, 8.3_
 
-- [ ] 9. Add hardware acceleration support
+- [x] 9. Add hardware acceleration support
   - Implement GPU acceleration detection and utilization
   - Create animation batching for optimal hardware usage
   - Add fallback mechanisms for systems without GPU acceleration
   - _Requirements: 9.1, 9.2, 9.3, 9.4_
 
-- [ ] 9.1 Implement GPU acceleration detection
+- [x] 9.1 Implement GPU acceleration detection
   - Create hardware capability detection for animation acceleration
   - Implement GPU resource availability monitoring
   - Add configuration options for GPU acceleration preferences
   - Write tests for hardware detection accuracy
   - _Requirements: 9.1, 9.2_
 
-- [ ] 9.2 Create animation batching system
+- [x] 9.2 Create animation batching system
   - Implement batch processing for multiple simultaneous animations
   - Create GPU-optimized interpolation calculations
   - Add automatic fallback to CPU processing when GPU is unavailable

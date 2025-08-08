@@ -435,6 +435,15 @@ private let animationConfigParser: [String: any ParserProtocol<AnimationConfig>]
     "max-concurrent-animations": Parser(\.maxConcurrentAnimations, parseInt),
     "adaptive-quality": Parser(\.adaptiveQuality, parseBool),
     "min-frame-rate": Parser(\.minFrameRate, parseDouble),
+    "spring-damping": Parser(\.springDamping, parseFloat),
+    "spring-velocity": Parser(\.springVelocity, parseFloat),
+    "bounce-intensity": Parser(\.bounceIntensity, parseFloat),
+    "elastic-amplitude": Parser(\.elasticAmplitude, parseFloat),
+    "elastic-period": Parser(\.elasticPeriod, parseFloat),
+    "gpu-acceleration-enabled": Parser(\.gpuAccelerationEnabled, parseBool),
+    "gpu-acceleration-mode": Parser(\.gpuAccelerationMode, parseGPUAccelerationMode),
+    "gpu-batch-size": Parser(\.gpuBatchSize, parseInt),
+    "gpu-fallback-threshold": Parser(\.gpuFallbackThreshold, parseDouble),
 ]
 
 private func parseAnimationConfig(_ raw: TOMLValueConvertible, _ backtrace: TomlBacktrace, _ errors: inout [TomlParseError]) -> AnimationConfig {
@@ -453,9 +462,20 @@ private func parseTimeInterval(_ raw: TOMLValueConvertible, _ backtrace: TomlBac
     parseDouble(raw, backtrace).map { TimeInterval($0) }
 }
 
+private func parseFloat(_ raw: TOMLValueConvertible, _ backtrace: TomlBacktrace) -> ParsedToml<Float> {
+    parseDouble(raw, backtrace).map { Float($0) }
+}
+
 private func parseAnimationEasing(_ raw: TOMLValueConvertible, _ backtrace: TomlBacktrace) -> ParsedToml<AnimationEasing> {
     parseString(raw, backtrace).flatMap { str in
         AnimationEasing.from(string: str)
-            .orFailure(.semantic(backtrace, "Invalid animation easing '\(str)'. Expected one of: \(AnimationEasing.allCases.map(\.rawValue).joined(separator: ", ")) or cubic-bezier(x1, y1, x2, y2)"))
+            .orFailure(.semantic(backtrace, "Invalid animation easing '\(str)'. Expected one of: \(AnimationEasing.allCases.map(\.rawValue).joined(separator: ", ")) or cubic-bezier(x1, y1, x2, y2) or spring(damping, velocity) or bounce(intensity) or elastic(amplitude, period)"))
+    }
+}
+
+private func parseGPUAccelerationMode(_ raw: TOMLValueConvertible, _ backtrace: TomlBacktrace) -> ParsedToml<GPUAccelerationMode> {
+    parseString(raw, backtrace).flatMap { str in
+        GPUAccelerationMode(rawValue: str)
+            .orFailure(.semantic(backtrace, "Invalid GPU acceleration mode '\(str)'. Expected one of: \(GPUAccelerationMode.allCases.map(\.rawValue).joined(separator: ", "))"))
     }
 }

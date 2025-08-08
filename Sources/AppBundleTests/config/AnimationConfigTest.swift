@@ -18,6 +18,11 @@ class AnimationConfigTest: XCTestCase {
         XCTAssertEqual(config.maxConcurrentAnimations, 10)
         XCTAssertTrue(config.adaptiveQuality)
         XCTAssertEqual(config.minFrameRate, 30.0)
+        XCTAssertEqual(config.springDamping, 0.8)
+        XCTAssertEqual(config.springVelocity, 0.0)
+        XCTAssertEqual(config.bounceIntensity, 1.0)
+        XCTAssertEqual(config.elasticAmplitude, 0.5)
+        XCTAssertEqual(config.elasticPeriod, 0.3)
     }
 
     func testAnimationConfigValidation() {
@@ -56,6 +61,56 @@ class AnimationConfigTest: XCTestCase {
         XCTAssertTrue(config.validate().contains("Min frame rate must be between 15.0 and 120.0 fps"))
 
         config.minFrameRate = 150.0
+        XCTAssertFalse(config.validate().isEmpty)
+        
+        // Reset to valid
+        config.minFrameRate = 30.0
+        XCTAssertTrue(config.validate().isEmpty)
+        
+        // Test invalid spring parameters
+        config.springDamping = -0.1
+        XCTAssertFalse(config.validate().isEmpty)
+        XCTAssertTrue(config.validate().contains { $0.contains("Spring parameters are invalid") })
+        
+        config.springDamping = 2.5
+        XCTAssertFalse(config.validate().isEmpty)
+        
+        config.springDamping = 1.0
+        config.springVelocity = 15.0
+        XCTAssertFalse(config.validate().isEmpty)
+        
+        config.springVelocity = -15.0
+        XCTAssertFalse(config.validate().isEmpty)
+        
+        // Reset to valid
+        config.springVelocity = 0.0
+        XCTAssertTrue(config.validate().isEmpty)
+        
+        // Test invalid bounce parameters
+        config.bounceIntensity = -0.1
+        XCTAssertFalse(config.validate().isEmpty)
+        XCTAssertTrue(config.validate().contains { $0.contains("Bounce parameters are invalid") })
+        
+        config.bounceIntensity = 3.5
+        XCTAssertFalse(config.validate().isEmpty)
+        
+        // Reset to valid
+        config.bounceIntensity = 1.0
+        XCTAssertTrue(config.validate().isEmpty)
+        
+        // Test invalid elastic parameters
+        config.elasticAmplitude = -0.1
+        XCTAssertFalse(config.validate().isEmpty)
+        XCTAssertTrue(config.validate().contains { $0.contains("Elastic parameters are invalid") })
+        
+        config.elasticAmplitude = 2.5
+        XCTAssertFalse(config.validate().isEmpty)
+        
+        config.elasticAmplitude = 1.0
+        config.elasticPeriod = 0.0
+        XCTAssertFalse(config.validate().isEmpty)
+        
+        config.elasticPeriod = 1.5
         XCTAssertFalse(config.validate().isEmpty)
     }
 
@@ -180,6 +235,60 @@ class AnimationConfigTest: XCTestCase {
         
         config.easingFunction = .easeInOut
         XCTAssertTrue(config.validate().isEmpty)
+        
+        // Spring easing functions should be valid with proper parameters
+        config.easingFunction = .spring(damping: 0.8, velocity: 0.0)
+        XCTAssertTrue(config.validate().isEmpty)
+        
+        config.easingFunction = .spring(damping: 1.0, velocity: 2.0)
+        XCTAssertTrue(config.validate().isEmpty)
+        
+        // Invalid spring easing function parameters
+        config.easingFunction = .spring(damping: -0.1, velocity: 0.0)
+        XCTAssertFalse(config.validate().isEmpty)
+        XCTAssertTrue(config.validate().contains { $0.contains("invalid parameters") })
+        
+        config.easingFunction = .spring(damping: 2.5, velocity: 0.0)
+        XCTAssertFalse(config.validate().isEmpty)
+        
+        config.easingFunction = .spring(damping: 1.0, velocity: 15.0)
+        XCTAssertFalse(config.validate().isEmpty)
+        
+        // Bounce easing functions should be valid with proper parameters
+        config.easingFunction = .bounce(intensity: 1.0)
+        XCTAssertTrue(config.validate().isEmpty)
+        
+        config.easingFunction = .bounce(intensity: 2.5)
+        XCTAssertTrue(config.validate().isEmpty)
+        
+        // Invalid bounce easing function parameters
+        config.easingFunction = .bounce(intensity: -0.1)
+        XCTAssertFalse(config.validate().isEmpty)
+        XCTAssertTrue(config.validate().contains { $0.contains("invalid parameters") })
+        
+        config.easingFunction = .bounce(intensity: 3.5)
+        XCTAssertFalse(config.validate().isEmpty)
+        
+        // Elastic easing functions should be valid with proper parameters
+        config.easingFunction = .elastic(amplitude: 0.5, period: 0.3)
+        XCTAssertTrue(config.validate().isEmpty)
+        
+        config.easingFunction = .elastic(amplitude: 1.5, period: 0.8)
+        XCTAssertTrue(config.validate().isEmpty)
+        
+        // Invalid elastic easing function parameters
+        config.easingFunction = .elastic(amplitude: -0.1, period: 0.3)
+        XCTAssertFalse(config.validate().isEmpty)
+        XCTAssertTrue(config.validate().contains { $0.contains("invalid parameters") })
+        
+        config.easingFunction = .elastic(amplitude: 2.5, period: 0.3)
+        XCTAssertFalse(config.validate().isEmpty)
+        
+        config.easingFunction = .elastic(amplitude: 1.0, period: 0.0)
+        XCTAssertFalse(config.validate().isEmpty)
+        
+        config.easingFunction = .elastic(amplitude: 1.0, period: 1.5)
+        XCTAssertFalse(config.validate().isEmpty)
     }
 
     func testCustomBezierCurveStringParsing() {
@@ -202,11 +311,37 @@ class AnimationConfigTest: XCTestCase {
         XCTAssertEqual(AnimationEasing.from(string: "ease-out"), .easeOut)
         XCTAssertEqual(AnimationEasing.from(string: "ease-in-out"), .easeInOut)
         
+        // Spring easing strings
+        XCTAssertEqual(AnimationEasing.from(string: "spring(0.8, 0.0)"), .spring(damping: 0.8, velocity: 0.0))
+        XCTAssertEqual(AnimationEasing.from(string: "spring(1.0, 2.0)"), .spring(damping: 1.0, velocity: 2.0))
+        XCTAssertEqual(AnimationEasing.from(string: "spring(0.5, -1.5)"), .spring(damping: 0.5, velocity: -1.5))
+        
+        // Bounce easing strings
+        XCTAssertEqual(AnimationEasing.from(string: "bounce(1.0)"), .bounce(intensity: 1.0))
+        XCTAssertEqual(AnimationEasing.from(string: "bounce(2.5)"), .bounce(intensity: 2.5))
+        XCTAssertEqual(AnimationEasing.from(string: "bounce(0.5)"), .bounce(intensity: 0.5))
+        
+        // Elastic easing strings
+        XCTAssertEqual(AnimationEasing.from(string: "elastic(0.5, 0.3)"), .elastic(amplitude: 0.5, period: 0.3))
+        XCTAssertEqual(AnimationEasing.from(string: "elastic(1.0, 0.2)"), .elastic(amplitude: 1.0, period: 0.2))
+        XCTAssertEqual(AnimationEasing.from(string: "elastic(0.8, 0.8)"), .elastic(amplitude: 0.8, period: 0.8))
+        
         // Invalid strings
         XCTAssertNil(AnimationEasing.from(string: "invalid"))
         XCTAssertNil(AnimationEasing.from(string: "cubic-bezier(0.25, 0.1, 0.75)")) // Missing parameter
         XCTAssertNil(AnimationEasing.from(string: "cubic-bezier(1.5, 0, 0.5, 1)")) // Invalid X parameter
         XCTAssertNil(AnimationEasing.from(string: "cubic-bezier(a, b, c, d)")) // Non-numeric parameters
+        XCTAssertNil(AnimationEasing.from(string: "spring(0.8)")) // Missing parameter
+        XCTAssertNil(AnimationEasing.from(string: "spring(2.5, 0.0)")) // Invalid damping
+        XCTAssertNil(AnimationEasing.from(string: "spring(1.0, 15.0)")) // Invalid velocity
+        XCTAssertNil(AnimationEasing.from(string: "spring(a, b)")) // Non-numeric parameters
+        XCTAssertNil(AnimationEasing.from(string: "bounce()")) // Missing parameter
+        XCTAssertNil(AnimationEasing.from(string: "bounce(3.5)")) // Invalid intensity
+        XCTAssertNil(AnimationEasing.from(string: "bounce(a)")) // Non-numeric parameter
+        XCTAssertNil(AnimationEasing.from(string: "elastic(0.5)")) // Missing parameter
+        XCTAssertNil(AnimationEasing.from(string: "elastic(2.5, 0.3)")) // Invalid amplitude
+        XCTAssertNil(AnimationEasing.from(string: "elastic(0.5, 1.5)")) // Invalid period
+        XCTAssertNil(AnimationEasing.from(string: "elastic(a, b)")) // Non-numeric parameters
     }
 
     func testCustomBezierCurveRawValue() {
@@ -215,6 +350,15 @@ class AnimationConfigTest: XCTestCase {
         
         let standardEasing = AnimationEasing.linear
         XCTAssertEqual(standardEasing.rawValue, "linear")
+        
+        let springEasing = AnimationEasing.spring(damping: 0.8, velocity: 2.0)
+        XCTAssertEqual(springEasing.rawValue, "spring(0.8, 2.0)")
+        
+        let bounceEasing = AnimationEasing.bounce(intensity: 1.5)
+        XCTAssertEqual(bounceEasing.rawValue, "bounce(1.5)")
+        
+        let elasticEasing = AnimationEasing.elastic(amplitude: 0.8, period: 0.4)
+        XCTAssertEqual(elasticEasing.rawValue, "elastic(0.8, 0.4)")
     }
 
     func testCustomBezierCurveConfigParsing() {
@@ -252,5 +396,141 @@ class AnimationConfigTest: XCTestCase {
         XCTAssertTrue(errors.isEmpty, "Overshoot effects should be valid: \(errors)")
 
         XCTAssertEqual(config.animation.easingFunction, .custom(x1: 0.5, y1: -0.5, x2: 0.5, y2: 1.5))
+    }
+
+    // MARK: - Spring Easing Tests
+
+    func testSpringEasingConfigParsing() {
+        let tomlString = """
+            [animation]
+            easing-function = "spring(0.8, 2.0)"
+            spring-damping = 0.6
+            spring-velocity = 1.5
+            """
+
+        let (config, errors) = parseConfig(tomlString)
+        XCTAssertTrue(errors.isEmpty, "Parsing should succeed without errors: \(errors)")
+
+        XCTAssertEqual(config.animation.easingFunction, .spring(damping: 0.8, velocity: 2.0))
+        XCTAssertEqual(config.animation.springDamping, 0.6)
+        XCTAssertEqual(config.animation.springVelocity, 1.5)
+    }
+
+    func testSpringEasingConfigParsingErrors() {
+        let tomlString = """
+            [animation]
+            easing-function = "spring(2.5, 0.0)"
+            spring-damping = -0.1
+            spring-velocity = 15.0
+            """
+
+        let (_, errors) = parseConfig(tomlString)
+        XCTAssertFalse(errors.isEmpty, "Should have validation errors")
+
+        let errorMessages = errors.map(\.description)
+        XCTAssertTrue(errorMessages.contains { $0.contains("Invalid animation easing") })
+        XCTAssertTrue(errorMessages.contains { $0.contains("Spring parameters are invalid") })
+    }
+
+    func testSpringEasingParameterValidation() {
+        // Test parameter validation
+        XCTAssertTrue(AnimationEasing.validateSpringParameters(damping: 0.0, velocity: 0.0))
+        XCTAssertTrue(AnimationEasing.validateSpringParameters(damping: 1.0, velocity: 5.0))
+        XCTAssertTrue(AnimationEasing.validateSpringParameters(damping: 2.0, velocity: -5.0))
+        
+        // Invalid parameters
+        XCTAssertFalse(AnimationEasing.validateSpringParameters(damping: -0.1, velocity: 0.0))
+        XCTAssertFalse(AnimationEasing.validateSpringParameters(damping: 2.1, velocity: 0.0))
+        XCTAssertFalse(AnimationEasing.validateSpringParameters(damping: 1.0, velocity: 11.0))
+        XCTAssertFalse(AnimationEasing.validateSpringParameters(damping: 1.0, velocity: -11.0))
+    }
+
+    // MARK: - Bounce Easing Configuration Tests
+
+    func testBounceEasingConfigParsing() {
+        let tomlString = """
+            [animation]
+            easing-function = "bounce(1.5)"
+            bounce-intensity = 2.0
+            """
+
+        let (config, errors) = parseConfig(tomlString)
+        XCTAssertTrue(errors.isEmpty, "Parsing should succeed without errors: \(errors)")
+
+        XCTAssertEqual(config.animation.easingFunction, .bounce(intensity: 1.5))
+        XCTAssertEqual(config.animation.bounceIntensity, 2.0)
+    }
+
+    func testBounceEasingConfigParsingErrors() {
+        let tomlString = """
+            [animation]
+            easing-function = "bounce(3.5)"
+            bounce-intensity = -0.1
+            """
+
+        let (_, errors) = parseConfig(tomlString)
+        XCTAssertFalse(errors.isEmpty, "Should have validation errors")
+
+        let errorMessages = errors.map(\.description)
+        XCTAssertTrue(errorMessages.contains { $0.contains("Invalid animation easing") })
+        XCTAssertTrue(errorMessages.contains { $0.contains("Bounce parameters are invalid") })
+    }
+
+    func testBounceEasingParameterValidation() {
+        // Test parameter validation
+        XCTAssertTrue(AnimationEasing.validateBounceParameters(intensity: 0.0))
+        XCTAssertTrue(AnimationEasing.validateBounceParameters(intensity: 1.0))
+        XCTAssertTrue(AnimationEasing.validateBounceParameters(intensity: 3.0))
+        
+        // Invalid parameters
+        XCTAssertFalse(AnimationEasing.validateBounceParameters(intensity: -0.1))
+        XCTAssertFalse(AnimationEasing.validateBounceParameters(intensity: 3.1))
+    }
+
+    // MARK: - Elastic Easing Configuration Tests
+
+    func testElasticEasingConfigParsing() {
+        let tomlString = """
+            [animation]
+            easing-function = "elastic(0.8, 0.4)"
+            elastic-amplitude = 1.2
+            elastic-period = 0.6
+            """
+
+        let (config, errors) = parseConfig(tomlString)
+        XCTAssertTrue(errors.isEmpty, "Parsing should succeed without errors: \(errors)")
+
+        XCTAssertEqual(config.animation.easingFunction, .elastic(amplitude: 0.8, period: 0.4))
+        XCTAssertEqual(config.animation.elasticAmplitude, 1.2)
+        XCTAssertEqual(config.animation.elasticPeriod, 0.6)
+    }
+
+    func testElasticEasingConfigParsingErrors() {
+        let tomlString = """
+            [animation]
+            easing-function = "elastic(2.5, 0.3)"
+            elastic-amplitude = -0.1
+            elastic-period = 1.5
+            """
+
+        let (_, errors) = parseConfig(tomlString)
+        XCTAssertFalse(errors.isEmpty, "Should have validation errors")
+
+        let errorMessages = errors.map(\.description)
+        XCTAssertTrue(errorMessages.contains { $0.contains("Invalid animation easing") })
+        XCTAssertTrue(errorMessages.contains { $0.contains("Elastic parameters are invalid") })
+    }
+
+    func testElasticEasingParameterValidation() {
+        // Test parameter validation
+        XCTAssertTrue(AnimationEasing.validateElasticParameters(amplitude: 0.0, period: 0.1))
+        XCTAssertTrue(AnimationEasing.validateElasticParameters(amplitude: 1.0, period: 0.5))
+        XCTAssertTrue(AnimationEasing.validateElasticParameters(amplitude: 2.0, period: 1.0))
+        
+        // Invalid parameters
+        XCTAssertFalse(AnimationEasing.validateElasticParameters(amplitude: -0.1, period: 0.5))
+        XCTAssertFalse(AnimationEasing.validateElasticParameters(amplitude: 2.1, period: 0.5))
+        XCTAssertFalse(AnimationEasing.validateElasticParameters(amplitude: 1.0, period: 0.0))
+        XCTAssertFalse(AnimationEasing.validateElasticParameters(amplitude: 1.0, period: 1.1))
     }
 }

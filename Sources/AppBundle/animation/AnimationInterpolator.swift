@@ -20,6 +20,18 @@ enum AnimationInterpolator {
                 return CAMediaTimingFunction(name: .easeInEaseOut)
             case .custom(let x1, let y1, let x2, let y2):
                 return CAMediaTimingFunction(controlPoints: x1, y1, x2, y2)
+            case .spring:
+                // Spring animations don't map directly to CAMediaTimingFunction
+                // We'll use a custom approximation
+                return CAMediaTimingFunction(name: .easeOut)
+            case .bounce:
+                // Bounce animations don't map directly to CAMediaTimingFunction
+                // We'll use a custom approximation
+                return CAMediaTimingFunction(name: .easeOut)
+            case .elastic:
+                // Elastic animations don't map directly to CAMediaTimingFunction
+                // We'll use a custom approximation
+                return CAMediaTimingFunction(name: .easeOut)
         }
     }
 
@@ -113,6 +125,134 @@ enum AnimationInterpolator {
             return 1.0 - 2.0 * (1.0 - progress) * (1.0 - progress)
         }
     }
+    
+    /// Bounce easing with configurable intensity
+    static func bounce(_ progress: Double, intensity: Float) -> Double {
+        let clampedProgress = max(0.0, min(1.0, progress))
+        let intensityFactor = Double(intensity)
+        
+        // Handle edge cases
+        if clampedProgress == 0.0 {
+            return 0.0
+        }
+        if clampedProgress == 1.0 {
+            return 1.0
+        }
+        
+        // Bounce easing implementation
+        // Based on Robert Penner's easing equations with configurable intensity
+        let n1 = 7.5625
+        let d1 = 2.75
+        let scaledIntensity = 1.0 + (intensityFactor - 1.0) * 0.5 // Scale intensity effect
+        
+        var result: Double
+        
+        if clampedProgress < 1.0 / d1 {
+            result = n1 * clampedProgress * clampedProgress
+        } else if clampedProgress < 2.0 / d1 {
+            let adjustedProgress = clampedProgress - 1.5 / d1
+            result = n1 * adjustedProgress * adjustedProgress + 0.75
+        } else if clampedProgress < 2.5 / d1 {
+            let adjustedProgress = clampedProgress - 2.25 / d1
+            result = n1 * adjustedProgress * adjustedProgress + 0.9375
+        } else {
+            let adjustedProgress = clampedProgress - 2.625 / d1
+            result = n1 * adjustedProgress * adjustedProgress + 0.984375
+        }
+        
+        // Apply intensity scaling
+        if intensityFactor != 1.0 {
+            // Enhance the bounce effect by scaling the overshoot
+            let overshoot = result - clampedProgress
+            result = clampedProgress + overshoot * scaledIntensity
+        }
+        
+        return result
+    }
+    
+    /// Elastic easing with configurable amplitude and period
+    static func elastic(_ progress: Double, amplitude: Float, period: Float) -> Double {
+        let clampedProgress = max(0.0, min(1.0, progress))
+        let amplitudeFactor = Double(amplitude)
+        let periodFactor = Double(period)
+        
+        // Handle edge cases
+        if clampedProgress == 0.0 {
+            return 0.0
+        }
+        if clampedProgress == 1.0 {
+            return 1.0
+        }
+        
+        // Elastic easing implementation
+        // Based on Robert Penner's easing equations with configurable parameters
+        let c4 = (2.0 * Double.pi) / periodFactor
+        
+        let result = -amplitudeFactor * pow(2.0, 10.0 * (clampedProgress - 1.0)) * sin((clampedProgress - 1.0) * c4) + 1.0
+        
+        return result
+    }
+    
+    /// Spring physics easing with damping and initial velocity
+    static func spring(_ progress: Double, damping: Float, velocity: Float) -> Double {
+        let clampedProgress = max(0.0, min(1.0, progress))
+        
+        // Handle edge cases
+        if clampedProgress == 0.0 {
+            return 0.0
+        }
+        if clampedProgress == 1.0 {
+            return 1.0
+        }
+        
+        // Convert parameters to spring physics constants
+        let dampingRatio = Double(damping)
+        let initialVelocity = Double(velocity)
+        
+        // Spring physics calculation for animation easing
+        // We want to go from 0 to 1, so we solve for displacement from equilibrium
+        // Using normalized time (progress) from 0 to 1
+        
+        let omega = 8.0 // Natural frequency (affects animation speed)
+        let zeta = dampingRatio // Damping ratio
+        let t = clampedProgress // Normalized time
+        
+        if zeta > 1.0 {
+            // Overdamped - no oscillation, smooth approach to target
+            let discriminant = sqrt(zeta * zeta - 1.0)
+            let r1 = -omega * (zeta + discriminant)
+            let r2 = -omega * (zeta - discriminant)
+            
+            // Initial conditions: x(0) = 0, x'(0) = initialVelocity
+            let c2 = initialVelocity / (omega * (r1 - r2))
+            let c1 = -c2
+            
+            let result = 1.0 + c1 * exp(r1 * t) + c2 * exp(r2 * t)
+            return max(0.0, min(2.0, result)) // Allow slight overshoot but clamp extremes
+            
+        } else if zeta == 1.0 {
+            // Critically damped - fastest approach without oscillation
+            let c1 = -1.0
+            let c2 = initialVelocity - omega * c1
+            
+            let result = 1.0 + (c1 + c2 * t) * exp(-omega * t)
+            return max(0.0, min(2.0, result))
+            
+        } else {
+            // Underdamped - oscillatory behavior
+            let omegaD = omega * sqrt(1.0 - zeta * zeta) // Damped frequency
+            
+            // Initial conditions: x(0) = 0, x'(0) = initialVelocity
+            let A = 1.0 / omegaD
+            let phi = atan2(initialVelocity + zeta * omega, omegaD)
+            
+            let envelope = exp(-zeta * omega * t)
+            let oscillation = sin(omegaD * t + phi)
+            
+            let result = 1.0 - A * envelope * oscillation
+            return result // Allow overshoot for spring effect
+        }
+    }
 
     /// Get manual easing function for the given easing type (for performance comparison)
     static func manualEasingFunction(for easing: AnimationEasing) -> (Double) -> Double {
@@ -129,14 +269,32 @@ enum AnimationInterpolator {
                 return { progress in
                     evaluateCubicBezierApproximation(t: progress, x1: Double(x1), y1: Double(y1), x2: Double(x2), y2: Double(y2))
                 }
+            case .spring(let damping, let velocity):
+                return { progress in
+                    spring(progress, damping: damping, velocity: velocity)
+                }
+            case .bounce(let intensity):
+                return { progress in
+                    bounce(progress, intensity: intensity)
+                }
+            case .elastic(let amplitude, let period):
+                return { progress in
+                    elastic(progress, amplitude: amplitude, period: period)
+                }
         }
     }
 
     /// Get easing function for the given easing type (uses CAMediaTimingFunction by default)
     static func easingFunction(for easing: AnimationEasing) -> (Double) -> Double {
-        let timingFunc = timingFunction(for: easing)
-        return { progress in
-            applyTimingFunction(progress, timingFunction: timingFunc)
+        switch easing {
+        case .spring, .bounce, .elastic:
+            // These animations use manual calculation since CAMediaTimingFunction doesn't support them
+            return manualEasingFunction(for: easing)
+        default:
+            let timingFunc = timingFunction(for: easing)
+            return { progress in
+                applyTimingFunction(progress, timingFunction: timingFunc)
+            }
         }
     }
 
