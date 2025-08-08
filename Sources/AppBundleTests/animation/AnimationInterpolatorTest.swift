@@ -1,5 +1,6 @@
 import XCTest
 import CoreGraphics
+import QuartzCore
 @testable import AppBundle
 
 class AnimationInterpolatorTest: XCTestCase {
@@ -49,6 +50,18 @@ class AnimationInterpolatorTest: XCTestCase {
         let easeInFunc = AnimationInterpolator.easingFunction(for: .easeIn)
         let easeOutFunc = AnimationInterpolator.easingFunction(for: .easeOut)
         let easeInOutFunc = AnimationInterpolator.easingFunction(for: .easeInOut)
+
+        XCTAssertEqual(linearFunc(0.5), 0.5, accuracy: 0.01)
+        XCTAssertEqual(easeInFunc(0.5), 0.25, accuracy: 0.01)
+        XCTAssertEqual(easeOutFunc(0.5), 0.75, accuracy: 0.01)
+        XCTAssertEqual(easeInOutFunc(0.5), 0.5, accuracy: 0.01)
+    }
+
+    func testManualEasingFunctionSelection() {
+        let linearFunc = AnimationInterpolator.manualEasingFunction(for: .linear)
+        let easeInFunc = AnimationInterpolator.manualEasingFunction(for: .easeIn)
+        let easeOutFunc = AnimationInterpolator.manualEasingFunction(for: .easeOut)
+        let easeInOutFunc = AnimationInterpolator.manualEasingFunction(for: .easeInOut)
 
         XCTAssertEqual(linearFunc(0.5), 0.5, accuracy: 0.001)
         XCTAssertEqual(easeInFunc(0.5), 0.25, accuracy: 0.001)
@@ -208,14 +221,26 @@ class AnimationInterpolatorTest: XCTestCase {
     }
 
     func testApplyEasing() {
-        XCTAssertEqual(AnimationInterpolator.applyEasing(0.5, easing: .linear), 0.5, accuracy: 0.001)
-        XCTAssertEqual(AnimationInterpolator.applyEasing(0.5, easing: .easeIn), 0.25, accuracy: 0.001)
-        XCTAssertEqual(AnimationInterpolator.applyEasing(0.5, easing: .easeOut), 0.75, accuracy: 0.001)
-        XCTAssertEqual(AnimationInterpolator.applyEasing(0.5, easing: .easeInOut), 0.5, accuracy: 0.001)
+        // CAMediaTimingFunction-based easing (with slightly relaxed accuracy due to bezier calculation)
+        XCTAssertEqual(AnimationInterpolator.applyEasing(0.5, easing: .linear), 0.5, accuracy: 0.01)
+        XCTAssertEqual(AnimationInterpolator.applyEasing(0.5, easing: .easeIn), 0.25, accuracy: 0.01)
+        XCTAssertEqual(AnimationInterpolator.applyEasing(0.5, easing: .easeOut), 0.75, accuracy: 0.01)
+        XCTAssertEqual(AnimationInterpolator.applyEasing(0.5, easing: .easeInOut), 0.5, accuracy: 0.01)
 
         // Test clamping
-        XCTAssertEqual(AnimationInterpolator.applyEasing(-0.5, easing: .linear), 0.0, accuracy: 0.001)
-        XCTAssertEqual(AnimationInterpolator.applyEasing(1.5, easing: .linear), 1.0, accuracy: 0.001)
+        XCTAssertEqual(AnimationInterpolator.applyEasing(-0.5, easing: .linear), 0.0, accuracy: 0.01)
+        XCTAssertEqual(AnimationInterpolator.applyEasing(1.5, easing: .linear), 1.0, accuracy: 0.01)
+    }
+
+    func testApplyManualEasing() {
+        XCTAssertEqual(AnimationInterpolator.applyManualEasing(0.5, easing: .linear), 0.5, accuracy: 0.001)
+        XCTAssertEqual(AnimationInterpolator.applyManualEasing(0.5, easing: .easeIn), 0.25, accuracy: 0.001)
+        XCTAssertEqual(AnimationInterpolator.applyManualEasing(0.5, easing: .easeOut), 0.75, accuracy: 0.001)
+        XCTAssertEqual(AnimationInterpolator.applyManualEasing(0.5, easing: .easeInOut), 0.5, accuracy: 0.001)
+
+        // Test clamping
+        XCTAssertEqual(AnimationInterpolator.applyManualEasing(-0.5, easing: .linear), 0.0, accuracy: 0.001)
+        XCTAssertEqual(AnimationInterpolator.applyManualEasing(1.5, easing: .linear), 1.0, accuracy: 0.001)
     }
 
     func testCalculateEasedProgress() {
@@ -237,7 +262,224 @@ class AnimationInterpolatorTest: XCTestCase {
             easing: .easeIn,
             currentTime: midTime,
         )
-        XCTAssertEqual(easeInProgress, 0.25, accuracy: 0.001)
+        XCTAssertEqual(easeInProgress, 0.25, accuracy: 0.01)
+    }
+
+    // MARK: - CAMediaTimingFunction Tests
+
+    func testTimingFunctionCreation() {
+        let linearTiming = AnimationInterpolator.timingFunction(for: .linear)
+        let easeInTiming = AnimationInterpolator.timingFunction(for: .easeIn)
+        let easeOutTiming = AnimationInterpolator.timingFunction(for: .easeOut)
+        let easeInOutTiming = AnimationInterpolator.timingFunction(for: .easeInOut)
+
+        XCTAssertNotNil(linearTiming)
+        XCTAssertNotNil(easeInTiming)
+        XCTAssertNotNil(easeOutTiming)
+        XCTAssertNotNil(easeInOutTiming)
+    }
+
+    func testTimingFunctionApplication() {
+        let linearTiming = AnimationInterpolator.timingFunction(for: .linear)
+        let easeInTiming = AnimationInterpolator.timingFunction(for: .easeIn)
+
+        let linearResult = AnimationInterpolator.applyTimingFunction(0.5, timingFunction: linearTiming)
+        let easeInResult = AnimationInterpolator.applyTimingFunction(0.5, timingFunction: easeInTiming)
+
+        XCTAssertEqual(linearResult, 0.5, accuracy: 0.01)
+        XCTAssertEqual(easeInResult, 0.25, accuracy: 0.01)
+
+        // Test boundary values
+        XCTAssertEqual(AnimationInterpolator.applyTimingFunction(0.0, timingFunction: linearTiming), 0.0, accuracy: 0.01)
+        XCTAssertEqual(AnimationInterpolator.applyTimingFunction(1.0, timingFunction: linearTiming), 1.0, accuracy: 0.01)
+    }
+
+    func testTimingFunctionClamping() {
+        let linearTiming = AnimationInterpolator.timingFunction(for: .linear)
+
+        // Test values outside [0, 1] range
+        let negativeResult = AnimationInterpolator.applyTimingFunction(-0.5, timingFunction: linearTiming)
+        let overResult = AnimationInterpolator.applyTimingFunction(1.5, timingFunction: linearTiming)
+
+        XCTAssertEqual(negativeResult, 0.0, accuracy: 0.01)
+        XCTAssertEqual(overResult, 1.0, accuracy: 0.01)
+    }
+
+    func testManualVsTimingFunctionConsistency() {
+        let testValues = [0.0, 0.25, 0.5, 0.75, 1.0]
+        let easingTypes: [AnimationEasing] = [.linear, .easeIn, .easeOut, .easeInOut]
+
+        for easing in easingTypes {
+            for progress in testValues {
+                let manualResult = AnimationInterpolator.applyManualEasing(progress, easing: easing)
+                let timingFunctionResult = AnimationInterpolator.applyEasing(progress, easing: easing)
+
+                // Allow for some difference due to different calculation methods
+                XCTAssertEqual(manualResult, timingFunctionResult, accuracy: 0.05,
+                              "Mismatch for \(easing.rawValue) at progress \(progress)")
+            }
+        }
+    }
+
+    // MARK: - Performance Benchmark Tests
+
+    func testEasingPerformanceBenchmark() {
+        let benchmark = AnimationInterpolator.benchmarkEasingPerformance(easing: .easeIn, iterations: 1000)
+
+        XCTAssertEqual(benchmark.easingType, .easeIn)
+        XCTAssertEqual(benchmark.iterations, 1000)
+        XCTAssertGreaterThan(benchmark.manualEasingTime, 0)
+        XCTAssertGreaterThan(benchmark.timingFunctionTime, 0)
+        XCTAssertGreaterThan(benchmark.speedupFactor, 0)
+
+        // Verify the description contains expected information
+        XCTAssertTrue(benchmark.description.contains("ease-in"))
+        XCTAssertTrue(benchmark.description.contains("1000"))
+    }
+
+    func testComprehensiveEasingBenchmarks() {
+        let benchmarks = AnimationInterpolator.runComprehensiveEasingBenchmarks(iterations: 100)
+
+        XCTAssertEqual(benchmarks.count, AnimationEasing.allCases.count)
+
+        for benchmark in benchmarks {
+            XCTAssertEqual(benchmark.iterations, 100)
+            XCTAssertGreaterThan(benchmark.manualEasingTime, 0)
+            XCTAssertGreaterThan(benchmark.timingFunctionTime, 0)
+            XCTAssertGreaterThan(benchmark.speedupFactor, 0)
+        }
+
+        // Verify all easing types are covered
+        let easingTypes = Set(benchmarks.map { $0.easingType })
+        let expectedTypes = Set(AnimationEasing.allCases)
+        XCTAssertEqual(easingTypes, expectedTypes)
+    }
+
+    func testBenchmarkPerformanceReasonable() {
+        // This test ensures benchmarks complete in reasonable time
+        let startTime = CFAbsoluteTimeGetCurrent()
+        let benchmark = AnimationInterpolator.benchmarkEasingPerformance(easing: .linear, iterations: 1000)
+        let endTime = CFAbsoluteTimeGetCurrent()
+        let totalTime = endTime - startTime
+
+        // Benchmark should complete within 1 second for 1000 iterations
+        XCTAssertLessThan(totalTime, 1.0)
+        XCTAssertGreaterThan(benchmark.speedupFactor, 0)
+    }
+
+    // MARK: - Custom Bézier Curve Tests
+
+    func testCustomBezierCurveCreation() {
+        let customEasing = AnimationEasing.custom(x1: 0.25, y1: 0.1, x2: 0.75, y2: 0.9)
+        let timingFunction = AnimationInterpolator.timingFunction(for: customEasing)
+        
+        XCTAssertNotNil(timingFunction)
+        
+        // Test that the timing function produces reasonable values
+        let result0 = AnimationInterpolator.applyTimingFunction(0.0, timingFunction: timingFunction)
+        let result50 = AnimationInterpolator.applyTimingFunction(0.5, timingFunction: timingFunction)
+        let result100 = AnimationInterpolator.applyTimingFunction(1.0, timingFunction: timingFunction)
+        
+        XCTAssertEqual(result0, 0.0, accuracy: 0.01)
+        XCTAssertEqual(result100, 1.0, accuracy: 0.01)
+        XCTAssertGreaterThan(result50, 0.0)
+        XCTAssertLessThan(result50, 1.0)
+    }
+
+    func testCustomBezierCurveValidation() {
+        // Valid parameters
+        XCTAssertTrue(AnimationEasing.validateBezierParameters(x1: 0.0, y1: 0.0, x2: 1.0, y2: 1.0))
+        XCTAssertTrue(AnimationEasing.validateBezierParameters(x1: 0.25, y1: 0.1, x2: 0.75, y2: 0.9))
+        XCTAssertTrue(AnimationEasing.validateBezierParameters(x1: 0.42, y1: 0.0, x2: 0.58, y2: 1.0))
+        
+        // Y values can be outside [0, 1] for overshoot effects
+        XCTAssertTrue(AnimationEasing.validateBezierParameters(x1: 0.5, y1: -0.5, x2: 0.5, y2: 1.5))
+        
+        // Invalid X parameters (outside [0, 1])
+        XCTAssertFalse(AnimationEasing.validateBezierParameters(x1: -0.1, y1: 0.0, x2: 1.0, y2: 1.0))
+        XCTAssertFalse(AnimationEasing.validateBezierParameters(x1: 0.0, y1: 0.0, x2: 1.1, y2: 1.0))
+        XCTAssertFalse(AnimationEasing.validateBezierParameters(x1: 1.5, y1: 0.0, x2: 0.5, y2: 1.0))
+    }
+
+    func testCustomBezierCurveStringParsing() {
+        // Valid cubic-bezier strings
+        let validCases = [
+            ("cubic-bezier(0.25, 0.1, 0.75, 0.9)", AnimationEasing.custom(x1: 0.25, y1: 0.1, x2: 0.75, y2: 0.9)),
+            ("cubic-bezier(0.42, 0, 0.58, 1)", AnimationEasing.custom(x1: 0.42, y1: 0.0, x2: 0.58, y2: 1.0)),
+            ("cubic-bezier(0, 0, 1, 1)", AnimationEasing.custom(x1: 0.0, y1: 0.0, x2: 1.0, y2: 1.0)),
+            ("cubic-bezier(0.5, -0.5, 0.5, 1.5)", AnimationEasing.custom(x1: 0.5, y1: -0.5, x2: 0.5, y2: 1.5)),
+        ]
+        
+        for (input, expected) in validCases {
+            let result = AnimationEasing.from(string: input)
+            XCTAssertEqual(result, expected, "Failed to parse: \(input)")
+        }
+        
+        // Standard easing strings
+        XCTAssertEqual(AnimationEasing.from(string: "linear"), .linear)
+        XCTAssertEqual(AnimationEasing.from(string: "ease-in"), .easeIn)
+        XCTAssertEqual(AnimationEasing.from(string: "ease-out"), .easeOut)
+        XCTAssertEqual(AnimationEasing.from(string: "ease-in-out"), .easeInOut)
+        
+        // Invalid strings
+        XCTAssertNil(AnimationEasing.from(string: "invalid"))
+        XCTAssertNil(AnimationEasing.from(string: "cubic-bezier(0.25, 0.1, 0.75)")) // Missing parameter
+        XCTAssertNil(AnimationEasing.from(string: "cubic-bezier(1.5, 0, 0.5, 1)")) // Invalid X parameter
+        XCTAssertNil(AnimationEasing.from(string: "cubic-bezier(a, b, c, d)")) // Non-numeric parameters
+    }
+
+    func testCustomBezierCurveRawValue() {
+        let customEasing = AnimationEasing.custom(x1: 0.25, y1: 0.1, x2: 0.75, y2: 0.9)
+        XCTAssertEqual(customEasing.rawValue, "cubic-bezier(0.25, 0.1, 0.75, 0.9)")
+        
+        let standardEasing = AnimationEasing.linear
+        XCTAssertEqual(standardEasing.rawValue, "linear")
+    }
+
+    func testCustomBezierCurvePerformanceBenchmark() {
+        let customEasing = AnimationEasing.custom(x1: 0.25, y1: 0.1, x2: 0.75, y2: 0.9)
+        let benchmark = AnimationInterpolator.benchmarkEasingPerformance(easing: customEasing, iterations: 1000)
+        
+        XCTAssertEqual(benchmark.easingType, customEasing)
+        XCTAssertEqual(benchmark.iterations, 1000)
+        XCTAssertGreaterThan(benchmark.manualEasingTime, 0)
+        XCTAssertGreaterThan(benchmark.timingFunctionTime, 0)
+        XCTAssertGreaterThan(benchmark.speedupFactor, 0)
+    }
+
+    func testCustomBezierCurveAccuracy() {
+        let customEasing = AnimationEasing.custom(x1: 0.25, y1: 0.1, x2: 0.75, y2: 0.9)
+        
+        // Test boundary values
+        XCTAssertEqual(AnimationInterpolator.applyEasing(0.0, easing: customEasing), 0.0, accuracy: 0.01)
+        XCTAssertEqual(AnimationInterpolator.applyEasing(1.0, easing: customEasing), 1.0, accuracy: 0.01)
+        
+        // Test intermediate values are reasonable
+        let midResult = AnimationInterpolator.applyEasing(0.5, easing: customEasing)
+        XCTAssertGreaterThan(midResult, 0.0)
+        XCTAssertLessThan(midResult, 1.0)
+        
+        // Test monotonicity (for valid timing functions)
+        let values = [0.0, 0.25, 0.5, 0.75, 1.0]
+        let results = values.map { AnimationInterpolator.applyEasing($0, easing: customEasing) }
+        
+        for i in 1..<results.count {
+            XCTAssertGreaterThanOrEqual(results[i], results[i-1], "Custom bezier curve should be monotonic")
+        }
+    }
+
+    func testCustomBezierCurveManualVsTimingFunctionConsistency() {
+        let customEasing = AnimationEasing.custom(x1: 0.25, y1: 0.1, x2: 0.75, y2: 0.9)
+        let testValues = [0.0, 0.25, 0.5, 0.75, 1.0]
+        
+        for progress in testValues {
+            let manualResult = AnimationInterpolator.applyManualEasing(progress, easing: customEasing)
+            let timingFunctionResult = AnimationInterpolator.applyEasing(progress, easing: customEasing)
+            
+            // Allow for some difference due to different calculation methods
+            XCTAssertEqual(manualResult, timingFunctionResult, accuracy: 0.1,
+                          "Mismatch for custom bezier at progress \(progress)")
+        }
     }
 
     // MARK: - Edge Case Tests

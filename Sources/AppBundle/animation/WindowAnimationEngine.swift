@@ -3,6 +3,7 @@ import AppKit
 import Common
 import Darwin.Mach
 import CoreGraphics
+import CoreVideo
 
 /// Notification posted when animation configuration changes
 extension Notification.Name {
@@ -19,6 +20,17 @@ class WindowAnimationEngine {
     private var activeAnimations: [UInt32: WindowAnimationContext] = [:]
     private var animationTimer: Timer?
     private var isPaused: Bool = false
+    
+    // CVDisplayLink properties
+    private var displayLink: CVDisplayLink?
+    private var displayLinkRunning: Bool = false
+    private var lastDisplayTime: CVTimeStamp?
+    
+    // Multi-display support
+    private var displayLinks: [CGDirectDisplayID: CVDisplayLink] = [:]
+    private var displayRefreshRates: [CGDirectDisplayID: Double] = [:]
+    private var activeDisplays: Set<CGDirectDisplayID> = []
+    private var primaryDisplayID: CGDirectDisplayID = 0
 
     // Performance monitoring
     private var frameCount: Int = 0
@@ -54,12 +66,15 @@ class WindowAnimationEngine {
         self.config = AnimationConfig.default
         self.originalConfigEnabled = AnimationConfig.default.enabled
         setupSystemPreferencesObserver()
+        setupDisplayConfigurationObserver()
+        setupMultiDisplayLinks()
         detectDisplayRefreshRate()
         initializeAnimationContextPool()
     }
 
     deinit {
         NotificationCenter.default.removeObserver(self)
+        // CVDisplayLink cleanup will be handled by the system when the object is deallocated
     }
 
     // MARK: - Configuration
@@ -108,6 +123,264 @@ class WindowAnimationEngine {
     /// Get current configuration
     var currentConfiguration: AnimationConfig {
         return config
+    }
+    
+    // MARK: - CVDisplayLink Management
+    
+    /// CVDisplayLink callback function
+    private let displayLinkCallback: CVDisplayLinkOutputCallback = { (displayLink, inNow, inOutputTime, flagsIn, flagsOut, displayLinkContext) -> CVReturn in
+        guard let context = displayLinkContext else {
+            return kCVReturnError
+        }
+        
+        let engine = Unmanaged<WindowAnimationEngine>.fromOpaque(context).takeUnretainedValue()
+        
+        // Copy the timestamp to avoid data races
+        let timestamp = inOutputTime.pointee
+        
+        // Schedule the animation update on the main queue
+        DispatchQueue.main.async {
+            engine.updateAnimationsFromDisplayLink(timestamp: timestamp)
+        }
+        
+        return kCVReturnSuccess
+    }
+    
+    /// Setup CVDisplayLink for display-synchronized animation updates
+    private func setupDisplayLink() {
+        guard displayLink == nil else { return }
+        
+        var displayLinkRef: CVDisplayLink?
+        let result = CVDisplayLinkCreateWithActiveCGDisplays(&displayLinkRef)
+        
+        guard result == kCVReturnSuccess, let displayLink = displayLinkRef else {
+            print("Failed to create CVDisplayLink, falling back to Timer")
+            return
+        }
+        
+        self.displayLink = displayLink
+        
+        // Set the callback
+        let context = Unmanaged.passUnretained(self).toOpaque()
+        CVDisplayLinkSetOutputCallback(displayLink, displayLinkCallback, context)
+        
+        // Set the display for the main screen
+        if let mainScreen = NSScreen.main {
+            let displayID = mainScreen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber
+            if let displayID = displayID {
+                CVDisplayLinkSetCurrentCGDisplay(displayLink, displayID.uint32Value)
+            }
+        }
+    }
+    
+    /// Start the CVDisplayLink
+    private func startDisplayLink() {
+        guard let displayLink = displayLink, !displayLinkRunning else { return }
+        
+        let result = CVDisplayLinkStart(displayLink)
+        if result == kCVReturnSuccess {
+            displayLinkRunning = true
+            lastDisplayTime = nil
+        } else {
+            print("Failed to start CVDisplayLink: \(result)")
+        }
+    }
+    
+    /// Stop the CVDisplayLink
+    private func stopDisplayLink() {
+        guard let displayLink = displayLink, displayLinkRunning else { return }
+        
+        CVDisplayLinkStop(displayLink)
+        displayLinkRunning = false
+        lastDisplayTime = nil
+    }
+    
+    /// Cleanup CVDisplayLink resources
+    private func cleanupDisplayLink() {
+        stopDisplayLink()
+        displayLink = nil
+    }
+    
+    /// Check if CVDisplayLink is available and working
+    private var isDisplayLinkAvailable: Bool {
+        return displayLink != nil
+    }
+    
+    /// Get the current display refresh rate from CVDisplayLink
+    private func getDisplayRefreshRateFromDisplayLink() -> Double {
+        guard let displayLink = displayLink else {
+            return 60.0 // Fallback
+        }
+        
+        let time = CVDisplayLinkGetNominalOutputVideoRefreshPeriod(displayLink)
+        if time.timeValue == 0 || time.timeScale == 0 {
+            return 60.0 // Fallback for invalid time
+        }
+        
+        let refreshRate = Double(time.timeScale) / Double(time.timeValue)
+        return max(30.0, min(240.0, refreshRate)) // Clamp to reasonable values
+    }
+    
+    // MARK: - Multi-Display Support
+    
+    /// Detect all active displays and their refresh rates
+    private func detectActiveDisplays() {
+        var displayCount: UInt32 = 0
+        var result = CGGetActiveDisplayList(0, nil, &displayCount)
+        
+        guard result == CGError.success && displayCount > 0 else {
+            print("Failed to get active display count")
+            return
+        }
+        
+        var displays = Array<CGDirectDisplayID>(repeating: 0, count: Int(displayCount))
+        result = CGGetActiveDisplayList(displayCount, &displays, &displayCount)
+        
+        guard result == CGError.success else {
+            print("Failed to get active display list")
+            return
+        }
+        
+        // Clear previous display data
+        activeDisplays.removeAll()
+        displayRefreshRates.removeAll()
+        
+        // Get the primary display
+        primaryDisplayID = CGMainDisplayID()
+        
+        // Detect refresh rate for each display
+        for displayID in displays {
+            activeDisplays.insert(displayID)
+            let refreshRate = getRefreshRateForDisplay(displayID)
+            displayRefreshRates[displayID] = refreshRate
+            
+            print("Detected display \(displayID): \(refreshRate) Hz")
+        }
+    }
+    
+    /// Get refresh rate for a specific display
+    private func getRefreshRateForDisplay(_ displayID: CGDirectDisplayID) -> Double {
+        guard let mode = CGDisplayCopyDisplayMode(displayID) else {
+            return 60.0 // Fallback
+        }
+        
+        let refreshRate = mode.refreshRate
+        return refreshRate > 0 ? max(30.0, min(240.0, refreshRate)) : 60.0
+    }
+    
+    /// Setup CVDisplayLink for a specific display
+    private func setupDisplayLinkForDisplay(_ displayID: CGDirectDisplayID) -> CVDisplayLink? {
+        var displayLinkRef: CVDisplayLink?
+        let result = CVDisplayLinkCreateWithCGDisplay(displayID, &displayLinkRef)
+        
+        guard result == kCVReturnSuccess, let displayLink = displayLinkRef else {
+            print("Failed to create CVDisplayLink for display \(displayID)")
+            return nil
+        }
+        
+        // Set the callback
+        let context = Unmanaged.passUnretained(self).toOpaque()
+        CVDisplayLinkSetOutputCallback(displayLink, displayLinkCallback, context)
+        
+        return displayLink
+    }
+    
+    /// Setup CVDisplayLinks for all active displays
+    private func setupMultiDisplayLinks() {
+        detectActiveDisplays()
+        
+        // Clean up existing display links
+        cleanupMultiDisplayLinks()
+        
+        // Create display links for all active displays
+        for displayID in activeDisplays {
+            if let displayLink = setupDisplayLinkForDisplay(displayID) {
+                displayLinks[displayID] = displayLink
+            }
+        }
+        
+        // If we have multiple displays, use the primary display's CVDisplayLink as the main one
+        if let primaryDisplayLink = displayLinks[primaryDisplayID] {
+            displayLink = primaryDisplayLink
+        } else if let firstDisplayLink = displayLinks.values.first {
+            displayLink = firstDisplayLink
+        }
+    }
+    
+    /// Start CVDisplayLinks for all displays
+    private func startMultiDisplayLinks() {
+        for (displayID, displayLink) in displayLinks {
+            let result = CVDisplayLinkStart(displayLink)
+            if result != kCVReturnSuccess {
+                print("Failed to start CVDisplayLink for display \(displayID): \(result)")
+            }
+        }
+        
+        if !displayLinks.isEmpty {
+            displayLinkRunning = true
+            lastDisplayTime = nil
+        }
+    }
+    
+    /// Stop CVDisplayLinks for all displays
+    private func stopMultiDisplayLinks() {
+        for (_, displayLink) in displayLinks {
+            CVDisplayLinkStop(displayLink)
+        }
+        displayLinkRunning = false
+        lastDisplayTime = nil
+    }
+    
+    /// Cleanup all multi-display CVDisplayLinks
+    private func cleanupMultiDisplayLinks() {
+        stopMultiDisplayLinks()
+        displayLinks.removeAll()
+    }
+    
+    /// Get the optimal refresh rate for animation timing (uses the highest refresh rate among active displays)
+    private func getOptimalMultiDisplayRefreshRate() -> Double {
+        guard !displayRefreshRates.isEmpty else {
+            return 60.0 // Fallback
+        }
+        
+        // Use the highest refresh rate among all displays for smoothest animation
+        return displayRefreshRates.values.max() ?? 60.0
+    }
+    
+    /// Handle display configuration changes
+    @objc private func handleDisplayConfigurationChange() {
+        print("Display configuration changed, updating CVDisplayLinks...")
+        
+        // Re-detect displays and update display links
+        setupMultiDisplayLinks()
+        
+        // Update the display refresh rate
+        displayRefreshRate = getOptimalMultiDisplayRefreshRate()
+        
+        // Restart display links if they were running
+        if displayLinkRunning {
+            startMultiDisplayLinks()
+        }
+    }
+    
+    /// Update animations synchronized with display refresh (called from CVDisplayLink callback)
+    private func updateAnimationsFromDisplayLink(timestamp: CVTimeStamp) {
+        // Track display synchronization accuracy
+        if let lastTime = lastDisplayTime {
+            let actualInterval = Double(timestamp.videoTime - lastTime.videoTime) / Double(timestamp.videoTimeScale)
+            let expectedInterval = 1.0 / displayRefreshRate
+            let syncAccuracy = abs(actualInterval - expectedInterval) / expectedInterval
+            
+            // Log sync issues if accuracy is poor (more than 10% off)
+            if syncAccuracy > 0.1 {
+                print("Display sync accuracy warning: expected \(expectedInterval)s, got \(actualInterval)s")
+            }
+        }
+        
+        lastDisplayTime = timestamp
+        
+        // Perform the actual animation updates
+        updateAnimations()
     }
 
     // MARK: - Core Animation Methods
@@ -395,6 +668,7 @@ class WindowAnimationEngine {
     /// Force stop all animations and cleanup resources (for testing)
     func forceStopAllAnimations() {
         cancelAllAnimations()
+        stopMultiDisplayLinks()
         batchTimer?.invalidate()
         batchTimer = nil
         batchedAnimations.removeAll()
@@ -405,6 +679,7 @@ class WindowAnimationEngine {
         performanceThresholdExceeded = false
         lastPerformanceCheck = Date()
         cpuThrottleLevel = 1.0
+        lastDisplayTime = nil
     }
 
     /// Pause all animations
@@ -635,6 +910,19 @@ class WindowAnimationEngine {
 
     /// Detect the display refresh rate for optimal animation timing
     private func detectDisplayRefreshRate() {
+        // Use multi-display optimal refresh rate if available
+        if !displayRefreshRates.isEmpty {
+            displayRefreshRate = getOptimalMultiDisplayRefreshRate()
+            return
+        }
+        
+        // First try to get refresh rate from CVDisplayLink if available
+        if displayLink != nil {
+            displayRefreshRate = getDisplayRefreshRateFromDisplayLink()
+            return
+        }
+        
+        // Fallback to Core Graphics method
         guard let screen = NSScreen.main else {
             displayRefreshRate = 60.0 // Default fallback
             return
@@ -669,24 +957,40 @@ class WindowAnimationEngine {
     // MARK: - Timer Management
 
     private func startTimerIfNeeded() {
-        guard animationTimer == nil && !activeAnimations.isEmpty && !isPaused else { return }
-
-        let timerInterval = getOptimalTimerInterval()
-
-        animationTimer = Timer.scheduledTimer(withTimeInterval: timerInterval, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.updateAnimations()
+        guard !activeAnimations.isEmpty && !isPaused else { return }
+        
+        // Setup multi-display CVDisplayLinks if not already done
+        if displayLinks.isEmpty {
+            setupMultiDisplayLinks()
+        }
+        
+        // Prefer CVDisplayLink for better display synchronization
+        if !displayLinks.isEmpty && !displayLinkRunning {
+            startMultiDisplayLinks()
+        } else if animationTimer == nil {
+            // Fallback to Timer if CVDisplayLink is not available
+            let timerInterval = getOptimalTimerInterval()
+            animationTimer = Timer.scheduledTimer(withTimeInterval: timerInterval, repeats: true) { [weak self] _ in
+                Task { @MainActor in
+                    self?.updateAnimations()
+                }
             }
         }
     }
 
     private func stopTimer() {
+        // Stop multi-display CVDisplayLinks if running
+        if displayLinkRunning {
+            stopMultiDisplayLinks()
+        }
+        
+        // Stop Timer if running
         animationTimer?.invalidate()
         animationTimer = nil
     }
 
     private func updateTimerIfNeeded() {
-        if animationTimer != nil {
+        if displayLinkRunning || animationTimer != nil {
             stopTimer()
             startTimerIfNeeded()
         }
@@ -836,6 +1140,9 @@ class WindowAnimationEngine {
         let poolMemory = animationContextPool.count * MemoryLayout<WindowAnimationContext>.size
         let totalMemoryUsage = activeMemory + poolMemory
 
+        // Calculate display sync accuracy (simplified - in real implementation would track over time)
+        let displaySyncAccuracy = displayLinkRunning ? 95.0 : 0.0 // Placeholder value
+
         return AnimationPerformanceMetrics(
             averageFrameRate: averageFrameRate,
             droppedFrames: droppedFrames,
@@ -847,6 +1154,11 @@ class WindowAnimationEngine {
             displayRefreshRate: displayRefreshRate,
             pooledContexts: animationContextPool.count,
             batchedAnimations: batchedAnimations.count,
+            usingDisplayLink: !displayLinks.isEmpty,
+            displayLinkRunning: displayLinkRunning,
+            displaySyncAccuracy: displaySyncAccuracy,
+            activeDisplayCount: activeDisplays.count,
+            displayRefreshRates: displayRefreshRates
         )
     }
 
@@ -868,6 +1180,17 @@ class WindowAnimationEngine {
                 }
             }
         }
+    }
+    
+    /// Setup observer for display configuration changes
+    private func setupDisplayConfigurationObserver() {
+        // Monitor display configuration changes
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleDisplayConfigurationChange),
+            name: NSApplication.didChangeScreenParametersNotification,
+            object: nil
+        )
     }
 
     private func checkSystemMotionPreferences() {

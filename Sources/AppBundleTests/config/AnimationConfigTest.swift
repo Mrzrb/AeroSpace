@@ -146,4 +146,111 @@ class AnimationConfigTest: XCTestCase {
         XCTAssertEqual(config.animation.defaultDuration, AnimationConfig.default.defaultDuration)
         XCTAssertEqual(config.animation.easingFunction, AnimationConfig.default.easingFunction)
     }
+
+    // MARK: - Custom Bézier Curve Tests
+
+    func testCustomBezierCurveValidation() {
+        var config = AnimationConfig()
+        
+        // Valid custom easing function
+        config.easingFunction = .custom(x1: 0.25, y1: 0.1, x2: 0.75, y2: 0.9)
+        XCTAssertTrue(config.validate().isEmpty)
+        
+        // Invalid custom easing function (X values outside [0, 1])
+        config.easingFunction = .custom(x1: -0.1, y1: 0.0, x2: 1.0, y2: 1.0)
+        XCTAssertFalse(config.validate().isEmpty)
+        XCTAssertTrue(config.validate().contains { $0.contains("invalid Bézier curve parameters") })
+        
+        config.easingFunction = .custom(x1: 0.0, y1: 0.0, x2: 1.5, y2: 1.0)
+        XCTAssertFalse(config.validate().isEmpty)
+        
+        // Y values outside [0, 1] should be valid (for overshoot effects)
+        config.easingFunction = .custom(x1: 0.5, y1: -0.5, x2: 0.5, y2: 1.5)
+        XCTAssertTrue(config.validate().isEmpty)
+        
+        // Standard easing functions should always be valid
+        config.easingFunction = .linear
+        XCTAssertTrue(config.validate().isEmpty)
+        
+        config.easingFunction = .easeIn
+        XCTAssertTrue(config.validate().isEmpty)
+        
+        config.easingFunction = .easeOut
+        XCTAssertTrue(config.validate().isEmpty)
+        
+        config.easingFunction = .easeInOut
+        XCTAssertTrue(config.validate().isEmpty)
+    }
+
+    func testCustomBezierCurveStringParsing() {
+        // Valid cubic-bezier strings
+        let validCases = [
+            ("cubic-bezier(0.25, 0.1, 0.75, 0.9)", AnimationEasing.custom(x1: 0.25, y1: 0.1, x2: 0.75, y2: 0.9)),
+            ("cubic-bezier(0.42, 0, 0.58, 1)", AnimationEasing.custom(x1: 0.42, y1: 0.0, x2: 0.58, y2: 1.0)),
+            ("cubic-bezier(0, 0, 1, 1)", AnimationEasing.custom(x1: 0.0, y1: 0.0, x2: 1.0, y2: 1.0)),
+            ("cubic-bezier(0.5, -0.5, 0.5, 1.5)", AnimationEasing.custom(x1: 0.5, y1: -0.5, x2: 0.5, y2: 1.5)),
+        ]
+        
+        for (input, expected) in validCases {
+            let result = AnimationEasing.from(string: input)
+            XCTAssertEqual(result, expected, "Failed to parse: \(input)")
+        }
+        
+        // Standard easing strings
+        XCTAssertEqual(AnimationEasing.from(string: "linear"), .linear)
+        XCTAssertEqual(AnimationEasing.from(string: "ease-in"), .easeIn)
+        XCTAssertEqual(AnimationEasing.from(string: "ease-out"), .easeOut)
+        XCTAssertEqual(AnimationEasing.from(string: "ease-in-out"), .easeInOut)
+        
+        // Invalid strings
+        XCTAssertNil(AnimationEasing.from(string: "invalid"))
+        XCTAssertNil(AnimationEasing.from(string: "cubic-bezier(0.25, 0.1, 0.75)")) // Missing parameter
+        XCTAssertNil(AnimationEasing.from(string: "cubic-bezier(1.5, 0, 0.5, 1)")) // Invalid X parameter
+        XCTAssertNil(AnimationEasing.from(string: "cubic-bezier(a, b, c, d)")) // Non-numeric parameters
+    }
+
+    func testCustomBezierCurveRawValue() {
+        let customEasing = AnimationEasing.custom(x1: 0.25, y1: 0.1, x2: 0.75, y2: 0.9)
+        XCTAssertEqual(customEasing.rawValue, "cubic-bezier(0.25, 0.1, 0.75, 0.9)")
+        
+        let standardEasing = AnimationEasing.linear
+        XCTAssertEqual(standardEasing.rawValue, "linear")
+    }
+
+    func testCustomBezierCurveConfigParsing() {
+        let tomlString = """
+            [animation]
+            easing-function = "cubic-bezier(0.25, 0.1, 0.75, 0.9)"
+            """
+
+        let (config, errors) = parseConfig(tomlString)
+        XCTAssertTrue(errors.isEmpty, "Parsing should succeed without errors: \(errors)")
+
+        XCTAssertEqual(config.animation.easingFunction, .custom(x1: 0.25, y1: 0.1, x2: 0.75, y2: 0.9))
+    }
+
+    func testCustomBezierCurveConfigParsingErrors() {
+        let tomlString = """
+            [animation]
+            easing-function = "cubic-bezier(1.5, 0, 0.5, 1)"
+            """
+
+        let (_, errors) = parseConfig(tomlString)
+        XCTAssertFalse(errors.isEmpty, "Should have validation errors")
+
+        let errorMessages = errors.map(\.description)
+        XCTAssertTrue(errorMessages.contains { $0.contains("Invalid animation easing") })
+    }
+
+    func testCustomBezierCurveOvershootEffects() {
+        let tomlString = """
+            [animation]
+            easing-function = "cubic-bezier(0.5, -0.5, 0.5, 1.5)"
+            """
+
+        let (config, errors) = parseConfig(tomlString)
+        XCTAssertTrue(errors.isEmpty, "Overshoot effects should be valid: \(errors)")
+
+        XCTAssertEqual(config.animation.easingFunction, .custom(x1: 0.5, y1: -0.5, x2: 0.5, y2: 1.5))
+    }
 }

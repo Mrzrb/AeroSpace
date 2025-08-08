@@ -1,5 +1,6 @@
 import Foundation
 import Common
+import CoreGraphics
 
 /// Represents the type of animation being performed
 enum AnimationType {
@@ -270,6 +271,15 @@ struct AnimationPerformanceMetrics {
     let displayRefreshRate: Double
     let pooledContexts: Int
     let batchedAnimations: Int
+    
+    // CVDisplayLink-specific metrics
+    let usingDisplayLink: Bool
+    let displayLinkRunning: Bool
+    let displaySyncAccuracy: Double // Percentage accuracy of display synchronization
+    
+    // Multi-display metrics
+    let activeDisplayCount: Int
+    let displayRefreshRates: [CGDirectDisplayID: Double]
 
     static let empty = AnimationPerformanceMetrics(
         averageFrameRate: 0.0,
@@ -282,6 +292,11 @@ struct AnimationPerformanceMetrics {
         displayRefreshRate: 60.0,
         pooledContexts: 0,
         batchedAnimations: 0,
+        usingDisplayLink: false,
+        displayLinkRunning: false,
+        displaySyncAccuracy: 0.0,
+        activeDisplayCount: 0,
+        displayRefreshRates: [:]
     )
 }
 

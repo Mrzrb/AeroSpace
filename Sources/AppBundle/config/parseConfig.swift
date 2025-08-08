@@ -455,7 +455,7 @@ private func parseTimeInterval(_ raw: TOMLValueConvertible, _ backtrace: TomlBac
 
 private func parseAnimationEasing(_ raw: TOMLValueConvertible, _ backtrace: TomlBacktrace) -> ParsedToml<AnimationEasing> {
     parseString(raw, backtrace).flatMap { str in
-        AnimationEasing(rawValue: str)
-            .orFailure(.semantic(backtrace, "Invalid animation easing '\(str)'. Expected one of: \(AnimationEasing.allCases.map(\.rawValue).joined(separator: ", "))"))
+        AnimationEasing.from(string: str)
+            .orFailure(.semantic(backtrace, "Invalid animation easing '\(str)'. Expected one of: \(AnimationEasing.allCases.map(\.rawValue).joined(separator: ", ")) or cubic-bezier(x1, y1, x2, y2)"))
     }
 }
