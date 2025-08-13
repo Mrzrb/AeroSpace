@@ -55,12 +55,21 @@ struct ResizeCommand: Command { // todo cover with tests
 
         node.setWeight(orientation, node.getWeight(orientation) + diff)
 
-        // For BSP layouts, normalize weights to sum to 1.0 after resize
+        // For BSP layouts, validate weights and trigger layout update
         if parent.layout == .bsp {
-            let totalWeight = parent.children.sumOfDouble { $0.getWeight(orientation) }
-            if totalWeight > 0 {
-                for child in parent.children {
-                    child.setWeight(orientation, child.getWeight(orientation) / totalWeight)
+            // Validate that no weight becomes too small (minimum 0.1 to prevent invisible windows)
+            let minWeight: CGFloat = 0.1
+            for child in parent.children {
+                let currentWeight = child.getWeight(orientation)
+                if currentWeight < minWeight {
+                    child.setWeight(orientation, minWeight)
+                }
+            }
+            
+            // Trigger layout update to make resize changes visible immediately
+            Task { @MainActor in
+                if let workspace = parent.nodeWorkspace {
+                    try await workspace.layoutWorkspace()
                 }
             }
         }

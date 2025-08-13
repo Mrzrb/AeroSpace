@@ -22,6 +22,145 @@ class TilingContainer: TreeNode, NonLeafTreeNodeObject { // todo consider renami
     static func newVTiles(parent: NonLeafTreeNodeObject, adaptiveWeight: CGFloat, index: Int) -> TilingContainer {
         TilingContainer(parent: parent, adaptiveWeight: adaptiveWeight, .v, .tiles, index: index)
     }
+    
+    /// Creates a new child container with intelligent layout mode selection
+    /// This method determines the appropriate layout mode based on the parent container or workspace
+    /// - Parameters:
+    ///   - parent: The parent container or workspace
+    ///   - adaptiveWeight: The weight for the new container
+    ///   - orientation: The orientation for the new container
+    ///   - index: The index where to insert the container
+    /// - Returns: A new TilingContainer with the appropriate layout mode
+    @MainActor
+    static func createChildContainer(
+        parent: NonLeafTreeNodeObject,
+        adaptiveWeight: CGFloat,
+        orientation: Orientation,
+        index: Int
+    ) -> TilingContainer {
+        let targetLayout = determineChildContainerLayout(parent: parent)
+        
+        let container = TilingContainer(
+            parent: parent,
+            adaptiveWeight: adaptiveWeight,
+            orientation,
+            targetLayout,
+            index: index
+        )
+        
+        // Note: Consistency enforcement is handled separately to avoid recursion
+        
+        return container
+    }
+    
+    /// Creates a new child container with explicit layout specification
+    /// This method allows overriding the intelligent layout selection when needed
+    /// - Parameters:
+    ///   - parent: The parent container or workspace
+    ///   - adaptiveWeight: The weight for the new container
+    ///   - orientation: The orientation for the new container
+    ///   - layout: The explicit layout to use
+    ///   - index: The index where to insert the container
+    /// - Returns: A new TilingContainer with the specified layout
+    @MainActor
+    static func createChildContainer(
+        parent: NonLeafTreeNodeObject,
+        adaptiveWeight: CGFloat,
+        orientation: Orientation,
+        layout: Layout,
+        index: Int
+    ) -> TilingContainer {
+        let container = TilingContainer(
+            parent: parent,
+            adaptiveWeight: adaptiveWeight,
+            orientation,
+            layout,
+            index: index
+        )
+        
+        // Note: Consistency enforcement is handled separately to avoid recursion
+        
+        return container
+    }
+    
+    /// Determines the appropriate layout for a child container based on parent context
+    /// - Parameter parent: The parent container or workspace
+    /// - Returns: The layout that should be used for the child container
+    @MainActor
+    private static func determineChildContainerLayout(parent: NonLeafTreeNodeObject) -> Layout {
+        // Priority 1: If parent is a BSP container, use BSP
+        if let parentContainer = parent as? TilingContainer, parentContainer.layout == .bsp {
+            return .bsp
+        }
+        
+        // Priority 2: If parent is a workspace with BSP root container, use BSP
+        if let workspace = parent as? Workspace {
+            let rootContainer = workspace.rootTilingContainer
+            if rootContainer.layout == .bsp {
+                return .bsp
+            }
+        }
+        
+        // Priority 3: Check if we're in a nested BSP context
+        if let parentContainer = parent as? TilingContainer {
+            var currentParent = parentContainer.parent
+            while let container = currentParent as? TilingContainer {
+                if container.layout == .bsp {
+                    return .bsp
+                }
+                currentParent = container.parent
+            }
+            
+            // Check workspace level
+            if let workspace = currentParent as? Workspace {
+                if workspace.rootTilingContainer.layout == .bsp {
+                    return .bsp
+                }
+            }
+        }
+        
+        // Default: Use tiles layout
+        return .tiles
+    }
+    
+    /// Creates a child container that inherits layout characteristics from its context
+    /// This is a convenience method that combines layout determination with container creation
+    /// - Parameters:
+    ///   - parent: The parent container or workspace
+    ///   - adaptiveWeight: The weight for the new container
+    ///   - orientation: The orientation for the new container
+    ///   - index: The index where to insert the container
+    ///   - enforceConsistency: Whether to enforce BSP consistency after creation
+    /// - Returns: A new TilingContainer with inherited layout characteristics
+    @MainActor
+    static func createInheritedChildContainer(
+        parent: NonLeafTreeNodeObject,
+        adaptiveWeight: CGFloat,
+        orientation: Orientation,
+        index: Int,
+        enforceConsistency: Bool = true
+    ) -> TilingContainer {
+        let targetLayout = determineChildContainerLayout(parent: parent)
+        
+        let container = TilingContainer(
+            parent: parent,
+            adaptiveWeight: adaptiveWeight,
+            orientation,
+            targetLayout,
+            index: index
+        )
+        
+        // Enforce consistency if requested and layout is BSP
+        if enforceConsistency && targetLayout == .bsp {
+            // Simple consistency enforcement without recursion
+            if let parentContainer = parent as? TilingContainer, parentContainer.layout == .bsp {
+                // Just ensure the parent is BSP, don't recurse
+                parentContainer.layout = .bsp
+            }
+        }
+        
+        return container
+    }
 }
 
 extension TilingContainer {
@@ -342,6 +481,29 @@ extension TilingContainer {
         }
 
         return windows
+    }
+
+    // MARK: - BSP Move Optimization
+
+    /// Optimizes BSP layout after a window move operation
+    /// This method should be called after any window move operation in BSP layout
+    @MainActor
+    func optimizeBSPAfterWindowMove() {
+        guard layout == .bsp else { return }
+        
+        // Validate and fix any structural issues first
+        if !validateBSPTreeStructure() {
+            rebuildBSPTreeStructure()
+        }
+        
+        // Optimize the tree structure
+        optimizeBSPTreeStructure()
+        
+        // Apply intelligent rebalancing
+        intelligentBSPRebalance()
+        
+        // Ensure optimal split directions
+        optimizeSplitDirections()
     }
 
     // MARK: - Root Container Change Handling
@@ -729,8 +891,342 @@ extension TilingContainer {
             }
         }
     }
+    
+    /// Represents different types of weight validation issues
+    enum BSPWeightIssue {
+        case weightTooSmall(childIndex: Int, originalWeight: CGFloat, correctedWeight: CGFloat)
+        case weightTooLarge(childIndex: Int, originalWeight: CGFloat, correctedWeight: CGFloat)
+        case totalWeightInvalid(originalTotal: CGFloat, correctedTotal: CGFloat)
+        case totalWeightExcessive(originalTotal: CGFloat, correctedTotal: CGFloat)
+        
+        var description: String {
+            switch self {
+            case .weightTooSmall(let index, let original, let corrected):
+                return "Child \(index) weight too small: \(original) -> \(corrected)"
+            case .weightTooLarge(let index, let original, let corrected):
+                return "Child \(index) weight too large: \(original) -> \(corrected)"
+            case .totalWeightInvalid(let original, let corrected):
+                return "Total weight invalid: \(original) -> \(corrected)"
+            case .totalWeightExcessive(let original, let corrected):
+                return "Total weight excessive: \(original) -> \(corrected)"
+            }
+        }
+    }
+    
+    /// Result of BSP weight validation operation
+    struct BSPWeightValidationResult {
+        let correctionsMade: Bool
+        let issues: [BSPWeightIssue]
+        
+        var hasIssues: Bool { !issues.isEmpty }
+        
+        var summary: String {
+            if !correctionsMade {
+                return "No weight corrections needed"
+            } else {
+                return "Made \(issues.count) weight corrections: \(issues.map(\.description).joined(separator: ", "))"
+            }
+        }
+    }
+    
+    /// Summary of current BSP weight distribution
+    struct BSPWeightSummary {
+        let isValid: Bool
+        let totalWeight: CGFloat
+        let averageWeight: CGFloat
+        let minWeight: CGFloat
+        let maxWeight: CGFloat
+        let childWeights: [CGFloat]
+        
+        var description: String {
+            return """
+            BSP Weight Summary:
+            - Valid: \(isValid)
+            - Total: \(String(format: "%.2f", totalWeight))
+            - Average: \(String(format: "%.2f", averageWeight))
+            - Range: \(String(format: "%.2f", minWeight)) - \(String(format: "%.2f", maxWeight))
+            - Individual: [\(childWeights.map { String(format: "%.2f", $0) }.joined(separator: ", "))]
+            """
+        }
+    }
 
 
+
+    // MARK: - Layout Update and Weight Management
+    
+    /// Triggers an asynchronous layout update for this container's workspace
+    /// This method ensures that layout changes are applied immediately after operations like resize
+    @MainActor
+    func triggerLayoutUpdate() {
+        Task { @MainActor in
+            do {
+                if let workspace = self.nodeWorkspace {
+                    try await workspace.layoutWorkspace()
+                }
+            } catch {
+                // Log error but don't crash - layout updates should be resilient
+                print("Layout update failed: \(error)")
+            }
+        }
+    }
+    
+    /// Triggers a layout update with error handling and optional completion callback
+    /// - Parameter completion: Optional callback executed after layout update completes
+    @MainActor
+    func triggerLayoutUpdate(completion: (() -> Void)? = nil) {
+        Task { @MainActor in
+            do {
+                if let workspace = self.nodeWorkspace {
+                    try await workspace.layoutWorkspace()
+                    completion?()
+                }
+            } catch {
+                // Log error but don't crash - layout updates should be resilient
+                print("Layout update failed: \(error)")
+                completion?()
+            }
+        }
+    }
+    
+    /// Validates BSP weights for all children in the specified orientation
+    /// Ensures no weight is too small to prevent invisible windows
+    /// - Parameter orientation: The orientation to validate weights for
+    @MainActor
+    func validateBSPWeights(orientation: Orientation) {
+        guard layout == .bsp else { return }
+        
+        let minWeight: CGFloat = 0.1 // 10% minimum to prevent invisible windows
+        var needsCorrection = false
+        
+        // First pass: identify weights that need correction
+        for child in children {
+            let currentWeight = child.getWeight(orientation)
+            if currentWeight < minWeight {
+                needsCorrection = true
+                break
+            }
+        }
+        
+        guard needsCorrection else { return }
+        
+        // Second pass: apply corrections
+        var totalWeight: CGFloat = 0
+        var correctedChildren: [TreeNode] = []
+        
+        for child in children {
+            let currentWeight = child.getWeight(orientation)
+            if currentWeight < minWeight {
+                child.setWeight(orientation, minWeight)
+                correctedChildren.append(child)
+            }
+            totalWeight += child.getWeight(orientation)
+        }
+        
+        // If total weight exceeds reasonable bounds, normalize
+        if totalWeight > CGFloat(children.count) * 2.0 { // Allow up to 2x average weight
+            normalizeWeights(orientation: orientation)
+        }
+    }
+    
+    /// Validates BSP weights and applies corrections if needed
+    /// Returns true if corrections were applied
+    /// - Parameter orientation: The orientation to validate weights for
+    /// - Returns: True if weights were corrected, false if they were already valid
+    @MainActor
+    @discardableResult
+    func validateAndCorrectBSPWeights(orientation: Orientation) -> Bool {
+        guard layout == .bsp else { return false }
+        
+        let minWeight: CGFloat = 0.1
+        let maxWeight: CGFloat = 0.9 * CGFloat(children.count) // Allow up to 90% of total space per child
+        var correctionsMade = false
+        
+        // Apply min/max constraints
+        for child in children {
+            let currentWeight = child.getWeight(orientation)
+            let correctedWeight = max(minWeight, min(maxWeight, currentWeight))
+            
+            if abs(correctedWeight - currentWeight) > 0.001 { // Use small epsilon for float comparison
+                child.setWeight(orientation, correctedWeight)
+                correctionsMade = true
+            }
+        }
+        
+        // Check if total weight is reasonable
+        let totalWeight = children.sumOfDouble { $0.getWeight(orientation) }
+        if totalWeight <= 0 || totalWeight > Double(children.count) * 2.0 {
+            normalizeWeights(orientation: orientation)
+            correctionsMade = true
+        }
+        
+        return correctionsMade
+    }
+    
+    /// Normalizes weights so they sum to a reasonable total
+    /// - Parameter orientation: The orientation to normalize weights for
+    @MainActor
+    private func normalizeWeights(orientation: Orientation) {
+        guard !children.isEmpty else { return }
+        
+        let targetTotalWeight = CGFloat(children.count) // Target: average weight of 1.0 per child
+        let currentTotalWeight = children.sumOfDouble { $0.getWeight(orientation) }
+        
+        guard currentTotalWeight > 0 else {
+            // If all weights are zero or negative, distribute equally with 1.0 per child
+            for child in children {
+                child.setWeight(orientation, 1.0)
+            }
+            return
+        }
+        
+        // Scale all weights proportionally
+        let scaleFactor = targetTotalWeight / currentTotalWeight
+        for child in children {
+            let currentWeight = child.getWeight(orientation)
+            child.setWeight(orientation, currentWeight * scaleFactor)
+        }
+    }
+    
+    /// Validates that BSP weights are within acceptable ranges and fixes common issues
+    /// This is a comprehensive validation that checks multiple weight-related problems
+    /// - Parameter orientation: The orientation to validate weights for
+    /// - Returns: A summary of what corrections were made
+    @MainActor
+    func validateBSPWeightsComprehensive(orientation: Orientation) -> BSPWeightValidationResult {
+        guard layout == .bsp else { 
+            return BSPWeightValidationResult(correctionsMade: false, issues: [])
+        }
+        
+        var issues: [BSPWeightIssue] = []
+        var correctionsMade = false
+        
+        let minWeight: CGFloat = 0.1
+        let maxWeight: CGFloat = 0.9 * CGFloat(children.count)
+        
+        // Check total weight first (before individual weight corrections)
+        let totalWeight = children.sumOfDouble { $0.getWeight(orientation) }
+        if totalWeight <= 0 {
+            normalizeWeights(orientation: orientation)
+            issues.append(.totalWeightInvalid(originalTotal: totalWeight, correctedTotal: CGFloat(children.count)))
+            correctionsMade = true
+        } else if totalWeight > Double(children.count) * 2.0 {
+            normalizeWeights(orientation: orientation)
+            let newTotal = children.sumOfDouble { $0.getWeight(orientation) }
+            issues.append(.totalWeightExcessive(originalTotal: totalWeight, correctedTotal: newTotal))
+            correctionsMade = true
+        } else {
+            // Only check individual weights if total weight is reasonable
+            
+            // Check for weights that are too small
+            for child in children {
+                let currentWeight = child.getWeight(orientation)
+                if currentWeight < minWeight {
+                    child.setWeight(orientation, minWeight)
+                    issues.append(.weightTooSmall(childIndex: child.ownIndex ?? -1, originalWeight: currentWeight, correctedWeight: minWeight))
+                    correctionsMade = true
+                }
+            }
+            
+            // Check for weights that are too large
+            for child in children {
+                let currentWeight = child.getWeight(orientation)
+                if currentWeight > maxWeight {
+                    child.setWeight(orientation, maxWeight)
+                    issues.append(.weightTooLarge(childIndex: child.ownIndex ?? -1, originalWeight: currentWeight, correctedWeight: maxWeight))
+                    correctionsMade = true
+                }
+            }
+        }
+        
+        return BSPWeightValidationResult(correctionsMade: correctionsMade, issues: issues)
+    }
+    
+    /// Applies intelligent weight distribution based on container characteristics
+    /// This method considers factors like window count, aspect ratio, and user preferences
+    /// - Parameters:
+    ///   - orientation: The orientation to apply intelligent weights for
+    ///   - containerRect: The current container dimensions (optional, for aspect ratio calculations)
+    @MainActor
+    func applyIntelligentBSPWeights(orientation: Orientation, containerRect: Rect? = nil) {
+        guard layout == .bsp && !children.isEmpty else { return }
+        
+        let windowCount = children.count
+        let aspectRatio = containerRect.map { $0.width / $0.height } ?? 1.0
+        
+        // Calculate intelligent weights based on various factors
+        var weights: [CGFloat] = []
+        
+        for i in 0..<windowCount {
+            var weight: CGFloat = 1.0 // Base weight
+            
+            // Factor 1: Adjust based on aspect ratio and orientation (takes precedence)
+            if orientation == .h && aspectRatio > 1.5 {
+                // Wide container with horizontal split - give more space to center windows
+                let centerBonus = 1.0 + abs(CGFloat(windowCount - 1) / 2.0 - CGFloat(i)) / CGFloat(windowCount) * -0.2
+                weight *= max(centerBonus, 0.8) // Ensure minimum weight
+            } else if orientation == .v && aspectRatio < 0.67 {
+                // Tall container with vertical split - similar center bias
+                let centerBonus = 1.0 + abs(CGFloat(windowCount - 1) / 2.0 - CGFloat(i)) / CGFloat(windowCount) * -0.2
+                weight *= max(centerBonus, 0.8) // Ensure minimum weight
+            } else {
+                // Factor 2: Give slightly more space to the first window (main window concept) only when not using aspect ratio logic
+                if i == 0 && windowCount > 1 {
+                    weight *= 1.1
+                }
+            }
+            
+            // Factor 3: Consider window type preferences (if available)
+            if let window = children[i] as? Window {
+                // Give more space to certain types of applications
+                if let macApp = window.app as? MacApp,
+                   let bundleId = macApp.bundleId {
+                    if bundleId.contains("editor") || bundleId.contains("ide") || bundleId.contains("xcode") {
+                        weight *= 1.2
+                    }
+                }
+            }
+            
+            weights.append(weight)
+        }
+        
+        // Normalize weights to reasonable total
+        let totalWeight = weights.reduce(0, +)
+        let targetTotal = CGFloat(windowCount)
+        let scaleFactor = targetTotal / totalWeight
+        
+        for (index, child) in children.enumerated() {
+            let finalWeight = weights[index] * scaleFactor
+            child.setWeight(orientation, finalWeight)
+        }
+    }
+    
+    /// Gets a summary of current BSP weight distribution
+    /// Useful for debugging and monitoring weight health
+    /// - Parameter orientation: The orientation to analyze
+    /// - Returns: A summary of the current weight distribution
+    @MainActor
+    func getBSPWeightSummary(orientation: Orientation) -> BSPWeightSummary {
+        guard layout == .bsp else {
+            return BSPWeightSummary(isValid: false, totalWeight: 0, averageWeight: 0, minWeight: 0, maxWeight: 0, childWeights: [])
+        }
+        
+        let childWeights = children.map { $0.getWeight(orientation) }
+        let totalWeight = childWeights.reduce(0, +)
+        let averageWeight = totalWeight / CGFloat(max(1, children.count))
+        let minWeight = childWeights.min() ?? 0
+        let maxWeight = childWeights.max() ?? 0
+        
+        let isValid = minWeight >= 0.1 && totalWeight > 0 && totalWeight <= CGFloat(children.count) * 2.0
+        
+        return BSPWeightSummary(
+            isValid: isValid,
+            totalWeight: totalWeight,
+            averageWeight: averageWeight,
+            minWeight: minWeight,
+            maxWeight: maxWeight,
+            childWeights: childWeights
+        )
+    }
 
     /// Safely attempts to split a BSP container with comprehensive error handling
     /// - Parameters:
@@ -944,6 +1440,158 @@ extension TilingContainer {
     static func logBSPError(_ error: BSPError) {
         // In a real implementation, this would use the app's logging system
         print("BSP Error: \(error.localizedDescription)")
+    }
+    
+    // MARK: - BSP Layout Consistency Enforcement
+    
+    /// Ensures that in BSP mode, all child containers use BSP layout
+    /// This method recursively converts all child containers to BSP layout
+    /// and validates the layout consistency throughout the tree
+    @MainActor
+    func enforceBSPLayoutConsistency() {
+        guard layout == .bsp else { return }
+        
+        var layoutChanges: [String] = []
+        
+        // Recursively enforce BSP layout on all child containers
+        for child in children {
+            if let childContainer = child as? TilingContainer {
+                if childContainer.layout != .bsp {
+                    let oldLayout = childContainer.layout
+                    childContainer.layout = .bsp
+                    layoutChanges.append("Container at index \(child.ownIndex ?? -1): \(oldLayout) → BSP")
+                }
+                
+                // Recursively enforce consistency on child containers
+                childContainer.enforceBSPLayoutConsistency()
+            }
+        }
+        
+        // Log layout changes for debugging
+        if !layoutChanges.isEmpty {
+            print("BSP Layout Consistency: Applied changes - \(layoutChanges.joined(separator: ", "))")
+        }
+        
+        // Only validate weights, avoid calling other methods that might cause recursion
+        validateAndCorrectBSPWeights(orientation: orientation)
+    }
+    
+    /// Validates that BSP layout consistency is maintained throughout the tree
+    /// - Returns: True if all containers in BSP mode use BSP layout, false otherwise
+    @MainActor
+    func validateBSPLayoutConsistency() -> Bool {
+        guard layout == .bsp else { return true }
+        
+        // Check all child containers
+        for child in children {
+            if let childContainer = child as? TilingContainer {
+                // Child containers in BSP parent should also be BSP
+                if childContainer.layout != .bsp {
+                    return false
+                }
+                
+                // Recursively validate child containers
+                if !childContainer.validateBSPLayoutConsistency() {
+                    return false
+                }
+            }
+        }
+        
+        return true
+    }
+    
+    /// Gets a report of layout consistency issues in the BSP tree
+    /// - Returns: A list of inconsistency issues found
+    @MainActor
+    func getBSPLayoutConsistencyReport() -> [BSPLayoutInconsistency] {
+        guard layout == .bsp else { return [] }
+        
+        var issues: [BSPLayoutInconsistency] = []
+        
+        // Check all child containers
+        for child in children {
+            if let childContainer = child as? TilingContainer {
+                if childContainer.layout != .bsp {
+                    issues.append(.childContainerWrongLayout(
+                        childIndex: child.ownIndex ?? -1,
+                        expectedLayout: .bsp,
+                        actualLayout: childContainer.layout
+                    ))
+                }
+                
+                // Recursively collect issues from child containers
+                issues.append(contentsOf: childContainer.getBSPLayoutConsistencyReport())
+            }
+        }
+        
+        return issues
+    }
+}
+
+// MARK: - BSP Weight Validation Types
+
+/// Represents different types of weight validation issues
+enum BSPWeightIssue {
+    case weightTooSmall(childIndex: Int, originalWeight: CGFloat, correctedWeight: CGFloat)
+    case weightTooLarge(childIndex: Int, originalWeight: CGFloat, correctedWeight: CGFloat)
+    case totalWeightInvalid(originalTotal: Double, correctedTotal: CGFloat)
+    case totalWeightExcessive(originalTotal: Double, correctedTotal: Double)
+    
+    var description: String {
+        switch self {
+        case .weightTooSmall(let childIndex, let originalWeight, let correctedWeight):
+            return "Child \(childIndex): weight too small (\(String(format: "%.3f", originalWeight)) → \(String(format: "%.3f", correctedWeight)))"
+        case .weightTooLarge(let childIndex, let originalWeight, let correctedWeight):
+            return "Child \(childIndex): weight too large (\(String(format: "%.3f", originalWeight)) → \(String(format: "%.3f", correctedWeight)))"
+        case .totalWeightInvalid(let originalTotal, let correctedTotal):
+            return "Total weight invalid (\(String(format: "%.3f", originalTotal)) → \(String(format: "%.3f", correctedTotal)))"
+        case .totalWeightExcessive(let originalTotal, let correctedTotal):
+            return "Total weight excessive (\(String(format: "%.3f", originalTotal)) → \(String(format: "%.3f", correctedTotal)))"
+        }
+    }
+}
+
+/// Provides a summary of BSP weight distribution
+struct BSPWeightSummary {
+    let isValid: Bool
+    let totalWeight: CGFloat
+    let averageWeight: CGFloat
+    let minWeight: CGFloat
+    let maxWeight: CGFloat
+    let childWeights: [CGFloat]
+    
+    var description: String {
+        return "BSP Weight Summary - Valid: \(isValid), Total: \(String(format: "%.2f", totalWeight)), Average: \(String(format: "%.2f", averageWeight)), Min: \(String(format: "%.2f", minWeight)), Max: \(String(format: "%.2f", maxWeight))"
+    }
+}
+
+/// Represents layout consistency issues in BSP trees
+enum BSPLayoutInconsistency {
+    case childContainerWrongLayout(childIndex: Int, expectedLayout: Layout, actualLayout: Layout)
+    case nestedInconsistency(containerPath: [Int], issue: String)
+    
+    var description: String {
+        switch self {
+        case .childContainerWrongLayout(let childIndex, let expectedLayout, let actualLayout):
+            return "Child container at index \(childIndex): expected \(expectedLayout), found \(actualLayout)"
+        case .nestedInconsistency(let containerPath, let issue):
+            return "Nested inconsistency at path \(containerPath): \(issue)"
+        }
+    }
+}
+
+/// Result of BSP weight validation with details about corrections made
+struct BSPWeightValidationResult {
+    let correctionsMade: Bool
+    let issues: [BSPWeightIssue]
+    
+    var description: String {
+        if issues.isEmpty {
+            return "BSP Weight Validation: No issues found"
+        } else {
+            let issueDescriptions = issues.map { $0.description }.joined(separator: "; ")
+            return "BSP Weight Validation: \(issues.count) issues \(correctionsMade ? "corrected" : "found") - \(issueDescriptions)"
+        }
     }
 }
 

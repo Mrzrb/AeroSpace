@@ -41,8 +41,10 @@ class TreeNode: Equatable, AeroAny {
                     }
                     adaptiveWeight = newValue
                 } else {
-                    // If orientations don't match, delegate to parent (similar to getWeight behavior)
-                    parent.setWeight(targetOrientation, newValue)
+                    // If orientations don't match, ignore the operation (no-op)
+                    // This prevents infinite recursion and makes sense because weight
+                    // only applies to the parent's orientation
+                    return
                 }
             default:
                 die("Can't change weight")
@@ -55,7 +57,7 @@ class TreeNode: Equatable, AeroAny {
         guard let parent else { die("Weight doesn't make sense for containers without parent") }
         return switch getChildParentRelation(child: self, parent: parent) {
             case .tiling(let parent):
-                parent.orientation == targetOrientation ? adaptiveWeight : parent.getWeight(targetOrientation)
+                parent.orientation == targetOrientation ? adaptiveWeight : 1.0 // Return default weight for non-matching orientation
             case .rootTilingContainer: parent.getWeight(targetOrientation)
             case .floatingWindow, .macosNativeFullscreenWindow: dieT("Weight doesn't make sense for floating windows")
             case .macosNativeMinimizedWindow: dieT("Weight doesn't make sense for minimized windows")

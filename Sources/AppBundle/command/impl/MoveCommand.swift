@@ -139,12 +139,20 @@ private let moveOutMacosUnconventionalWindow = "moving macOS fullscreen, minimiz
     _ direction: CardinalDirection,
 ) {
     let prevRoot = workspace.rootTilingContainer
+    let targetLayout = prevRoot.layout  // Preserve original layout instead of forcing tiles
+    
     prevRoot.unbindFromParent()
-    // Force tiles layout
-    _ = TilingContainer(parent: workspace, adaptiveWeight: WEIGHT_AUTO, direction.orientation, .tiles, index: 0)
+    
+    // Create new container with preserved layout mode
+    _ = TilingContainer(parent: workspace, adaptiveWeight: WEIGHT_AUTO, direction.orientation, targetLayout, index: 0)
     check(prevRoot != workspace.rootTilingContainer)
     prevRoot.bind(to: workspace.rootTilingContainer, adaptiveWeight: WEIGHT_AUTO, index: 0)
     window.bind(to: workspace.rootTilingContainer, adaptiveWeight: WEIGHT_AUTO, index: direction.insertionOffset)
+    
+    // Apply BSP optimization if we're dealing with BSP layout
+    if targetLayout == .bsp {
+        workspace.rootTilingContainer.optimizeBSPAfterWindowMove()
+    }
 }
 
 @MainActor private func deepMoveIn(window: Window, into container: TilingContainer, moveDirection: CardinalDirection) -> Bool {
