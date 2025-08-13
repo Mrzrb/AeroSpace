@@ -57,13 +57,22 @@ struct ResizeCommand: Command { // todo cover with tests
 
         // For BSP layouts, validate weights and trigger layout update
         if parent.layout == .bsp {
-            // Validate that no weight becomes too small (minimum 0.1 to prevent invisible windows)
+            // Apply minimum weight constraints to prevent invisible windows
             let minWeight: CGFloat = 0.1
+            var hadInvalidWeights = false
+            
             for child in parent.children {
                 let currentWeight = child.getWeight(orientation)
                 if currentWeight < minWeight {
                     child.setWeight(orientation, minWeight)
+                    hadInvalidWeights = true
                 }
+            }
+            
+            // Only apply comprehensive validation if we had invalid weights AND
+            // this wasn't an explicit absolute value setting
+            if hadInvalidWeights && !args.units.val.isAbsoluteSet {
+                parent.validateAndCorrectBSPWeights(orientation: orientation)
             }
             
             // Trigger layout update to make resize changes visible immediately
