@@ -45,26 +45,47 @@ struct ResizeCommand: Command { // todo cover with tests
         
         appendToLog("ResizeCommand: Found \(candidates.count) candidates")
 
+        // First, we need to determine the basic resize parameters to calculate diff
+        let preliminaryResult = findPreliminaryResizeTarget(candidates: candidates, dimension: args.dimension.val)
+        guard let preliminaryNode = preliminaryResult.node,
+              let preliminaryParent = preliminaryResult.parent,
+              let preliminaryOrientation = preliminaryResult.orientation else {
+            appendToLog("ResizeCommand: No preliminary target found")
+            return io.err("No suitable resize target found")
+        }
+
+        let currentWeight = preliminaryNode.getWeight(preliminaryOrientation)
+        let diff: CGFloat = switch args.units.val {
+            case .set(let unit): CGFloat(unit) - currentWeight
+            case .add(let unit): CGFloat(unit)
+            case .subtract(let unit): -CGFloat(unit)
+        }
+
+        // Now find the optimal resize target with the calculated diff
         let orientation: Orientation?
         let parent: TilingContainer?
         let node: TreeNode?
         switch args.dimension.val {
             case .width:
                 orientation = .h
-                node = candidates.first(where: { ($0.parent as? TilingContainer)?.orientation == orientation })
-                parent = node?.parent as? TilingContainer
+                let result = findBestResizeTarget(candidates: candidates, targetOrientation: .h, diff: diff)
+                node = result.node
+                parent = result.parent
             case .height:
                 orientation = .v
-                node = candidates.first(where: { ($0.parent as? TilingContainer)?.orientation == orientation })
-                parent = node?.parent as? TilingContainer
+                let result = findBestResizeTarget(candidates: candidates, targetOrientation: .v, diff: diff)
+                node = result.node
+                parent = result.parent
             case .smart:
-                node = candidates.first
-                parent = node?.parent as? TilingContainer
-                orientation = parent?.orientation
+                let result = findSmartResizeTarget(candidates: candidates, diff: diff)
+                node = result.node
+                parent = result.parent
+                orientation = result.orientation
             case .smartOpposite:
-                orientation = (candidates.first?.parent as? TilingContainer)?.orientation.opposite
-                node = candidates.first(where: { ($0.parent as? TilingContainer)?.orientation == orientation })
-                parent = node?.parent as? TilingContainer
+                let result = findSmartOppositeResizeTarget(candidates: candidates, diff: diff)
+                node = result.node
+                parent = result.parent
+                orientation = result.orientation
         }
         guard let parent else { 
             appendToLog("ResizeCommand: No parent found - floating window?")
@@ -88,115 +109,270 @@ struct ResizeCommand: Command { // todo cover with tests
                 appendToLog("ResizeCommand: Workspace=\(workspace.name), root layout=\(workspace.rootTilingContainer.layout)")
             }
         }
-
-        let currentWeight = node.getWeight(orientation)
-        let diff: CGFloat = switch args.units.val {
-            case .set(let unit): CGFloat(unit) - currentWeight
-            case .add(let unit): CGFloat(unit)
-            case .subtract(let unit): -CGFloat(unit)
-        }
         
         appendToLog("ResizeCommand: Current weight=\(currentWeight), diff=\(diff)")
 
-        // Handle different layout modes with specialized logic
+        // Handle different layout modes - BSP and tiles now use the same logic
         switch parent.layout {
         case .bsp:
-            appendToLog("ResizeCommand: Using BSP resize handler")
-            return await handleBSPResize(parent: parent, node: node, diff: diff, orientation: orientation, io: io)
+            appendToLog("ResizeCommand: Using unified resize handler for BSP")
+            return handleUnifiedResize(parent: parent, node: node, diff: diff, orientation: orientation, io: io)
         case .tiles:
-            appendToLog("ResizeCommand: Using tiles resize handler")
-            return handleTilesResize(parent: parent, node: node, diff: diff, orientation: orientation)
+            appendToLog("ResizeCommand: Using unified resize handler for tiles")
+            return handleUnifiedResize(parent: parent, node: node, diff: diff, orientation: orientation, io: io)
         default:
             appendToLog("ResizeCommand: Unsupported layout: \(parent.layout)")
             return io.err("resize command only supports tiles and bsp layouts")
         }
     }
 
-    /// Handle resize operation for BSP layout
+    /// Result type for resize target selection
+    private struct ResizeTarget {
+        let node: TreeNode?
+        let parent: TilingContainer?
+        let orientation: Orientation?
+    }
+
+    /// Find preliminary resize target to calculate diff (simple selection without optimization)
     @MainActor
-    private func handleBSPResize(parent: TilingContainer, node: TreeNode, diff: CGFloat, orientation: Orientation, io: CmdIo) async -> Bool {
-        appendToLog("BSPResize: Starting with \(parent.children.count) children, diff=\(diff), orientation=\(orientation)")
+    private func findPreliminaryResizeTarget(candidates: [TreeNode], dimension: ResizeCmdArgs.Dimension) -> ResizeTarget {
+        switch dimension {
+            case .width:
+                if let candidate = candidates.first(where: { ($0.parent as? TilingContainer)?.orientation == .h }),
+                   let parent = candidate.parent as? TilingContainer {
+                    return ResizeTarget(node: candidate, parent: parent, orientation: .h)
+                }
+            case .height:
+                if let candidate = candidates.first(where: { ($0.parent as? TilingContainer)?.orientation == .v }),
+                   let parent = candidate.parent as? TilingContainer {
+                    return ResizeTarget(node: candidate, parent: parent, orientation: .v)
+                }
+            case .smart:
+                if let candidate = candidates.first,
+                   let parent = candidate.parent as? TilingContainer {
+                    return ResizeTarget(node: candidate, parent: parent, orientation: parent.orientation)
+                }
+            case .smartOpposite:
+                if let candidate = candidates.first,
+                   let parent = candidate.parent as? TilingContainer {
+                    let oppositeOrientation = parent.orientation.opposite
+                    if let oppositeCandidate = candidates.first(where: { ($0.parent as? TilingContainer)?.orientation == oppositeOrientation }),
+                       let oppositeParent = oppositeCandidate.parent as? TilingContainer {
+                        return ResizeTarget(node: oppositeCandidate, parent: oppositeParent, orientation: oppositeOrientation)
+                    }
+                }
+        }
+        return ResizeTarget(node: nil, parent: nil, orientation: nil)
+    }
+
+    /// Find the best resize target for a specific orientation
+    @MainActor
+    private func findBestResizeTarget(candidates: [TreeNode], targetOrientation: Orientation, diff: CGFloat) -> ResizeTarget {
+        appendToLog("ResizeCommand: Finding best target for orientation \(targetOrientation), diff=\(diff)")
         
-        // Set resize in progress flag to prevent intelligent rebalancing
-        parent.setResizeInProgress(true)
+        // Filter candidates that match the target orientation
+        let matchingCandidates = candidates.compactMap { candidate -> (TreeNode, TilingContainer)? in
+            guard let parent = candidate.parent as? TilingContainer,
+                  parent.orientation == targetOrientation else { return nil }
+            return (candidate, parent)
+        }
+        
+        if matchingCandidates.isEmpty {
+            appendToLog("ResizeCommand: No matching candidates for orientation \(targetOrientation)")
+            return ResizeTarget(node: nil, parent: nil, orientation: nil)
+        }
+        
+        // For nested containers, prefer the one that can accommodate the resize better
+        let bestCandidate = matchingCandidates.max { (a, b) in
+            let (nodeA, parentA) = a
+            let (nodeB, parentB) = b
+            
+            // Calculate resize potential for each candidate
+            let potentialA = calculateResizePotential(node: nodeA, parent: parentA, diff: diff, orientation: targetOrientation)
+            let potentialB = calculateResizePotential(node: nodeB, parent: parentB, diff: diff, orientation: targetOrientation)
+            
+            return potentialA < potentialB
+        }
+        
+        if let (node, parent) = bestCandidate {
+            appendToLog("ResizeCommand: Selected best candidate with resize potential")
+            return ResizeTarget(node: node, parent: parent, orientation: targetOrientation)
+        }
+        
+        return ResizeTarget(node: nil, parent: nil, orientation: nil)
+    }
+
+    /// Find smart resize target (chooses best orientation automatically)
+    @MainActor
+    private func findSmartResizeTarget(candidates: [TreeNode], diff: CGFloat) -> ResizeTarget {
+        appendToLog("ResizeCommand: Finding smart resize target, diff=\(diff)")
+        
+        // Try both orientations and pick the best one
+        let horizontalResult = findBestResizeTarget(candidates: candidates, targetOrientation: .h, diff: diff)
+        let verticalResult = findBestResizeTarget(candidates: candidates, targetOrientation: .v, diff: diff)
+        
+        // If only one orientation is available, use it
+        if horizontalResult.node != nil && verticalResult.node == nil {
+            appendToLog("ResizeCommand: Smart resize using horizontal orientation")
+            return horizontalResult
+        }
+        if verticalResult.node != nil && horizontalResult.node == nil {
+            appendToLog("ResizeCommand: Smart resize using vertical orientation")
+            return verticalResult
+        }
+        
+        // If both are available, choose based on resize potential
+        if let hNode = horizontalResult.node, let hParent = horizontalResult.parent,
+           let vNode = verticalResult.node, let vParent = verticalResult.parent {
+            
+            let hPotential = calculateResizePotential(node: hNode, parent: hParent, diff: diff, orientation: .h)
+            let vPotential = calculateResizePotential(node: vNode, parent: vParent, diff: diff, orientation: .v)
+            
+            if hPotential >= vPotential {
+                appendToLog("ResizeCommand: Smart resize chose horizontal (potential: \(hPotential) vs \(vPotential))")
+                return horizontalResult
+            } else {
+                appendToLog("ResizeCommand: Smart resize chose vertical (potential: \(vPotential) vs \(hPotential))")
+                return verticalResult
+            }
+        }
+        
+        // Fallback to first available candidate
+        if let firstCandidate = candidates.first,
+           let parent = firstCandidate.parent as? TilingContainer {
+            appendToLog("ResizeCommand: Smart resize fallback to first candidate")
+            return ResizeTarget(node: firstCandidate, parent: parent, orientation: parent.orientation)
+        }
+        
+        return ResizeTarget(node: nil, parent: nil, orientation: nil)
+    }
+
+    /// Find smart opposite resize target
+    @MainActor
+    private func findSmartOppositeResizeTarget(candidates: [TreeNode], diff: CGFloat) -> ResizeTarget {
+        appendToLog("ResizeCommand: Finding smart opposite resize target")
+        
+        // Get the orientation of the first candidate's parent
+        guard let firstCandidate = candidates.first,
+              let firstParent = firstCandidate.parent as? TilingContainer else {
+            return ResizeTarget(node: nil, parent: nil, orientation: nil)
+        }
+        
+        let oppositeOrientation = firstParent.orientation.opposite
+        return findBestResizeTarget(candidates: candidates, targetOrientation: oppositeOrientation, diff: diff)
+    }
+
+    /// Calculate how well a container can accommodate a resize operation
+    @MainActor
+    private func calculateResizePotential(node: TreeNode, parent: TilingContainer, diff: CGFloat, orientation: Orientation) -> CGFloat {
+        let currentWeight = node.getWeight(orientation)
+        let siblingCount = parent.children.count - 1
+        
+        guard siblingCount > 0 else { return 0 }
+        
+        let childDiff = diff / CGFloat(siblingCount)
+        
+        // Calculate how much space is available for this resize
+        var availableSpace: CGFloat = 0
+        
+        if diff > 0 {
+            // Growing: check how much siblings can shrink
+            for sibling in parent.children where sibling !== node {
+                let siblingWeight = sibling.getWeight(orientation)
+                let canShrink = max(0, siblingWeight - 0.1) // Minimum weight is 0.1
+                availableSpace += canShrink
+            }
+        } else {
+            // Shrinking: check how much this node can shrink
+            availableSpace = max(0, currentWeight - 0.1)
+        }
+        
+        // Prefer containers where the resize can be fully accommodated
+        let requestedSpace = abs(diff)
+        let accommodationRatio = min(1.0, availableSpace / requestedSpace)
+        
+        // Consider the depth, but prefer containers that can better accommodate the resize
+        let depth = calculateContainerDepth(parent)
+        let depthPenalty = CGFloat(depth) * 0.05 // Reduced penalty to allow deeper containers when they're better
+        
+        // Bonus for containers where the resize can be fully accommodated
+        let accommodationBonus = accommodationRatio >= 1.0 ? 0.2 : 0.0
+        
+        let potential = accommodationRatio + accommodationBonus - depthPenalty
+        
+        appendToLog("ResizeCommand: Container potential=\(potential) (accommodation=\(accommodationRatio), depth=\(depth))")
+        return potential
+    }
+
+    /// Calculate the depth of a container in the tree
+    @MainActor
+    private func calculateContainerDepth(_ container: TilingContainer) -> Int {
+        var depth = 0
+        var current: TreeNode? = container
+        
+        while let node = current, node.parent != nil {
+            depth += 1
+            current = node.parent as? TreeNode
+        }
+        
+        return depth
+    }
+
+    /// Handle resize operation for both BSP and tiles layouts using unified logic
+    @MainActor
+    private func handleUnifiedResize(parent: TilingContainer, node: TreeNode, diff: CGFloat, orientation: Orientation, io: CmdIo) -> Bool {
+        appendToLog("UnifiedResize: Starting with \(parent.children.count) children, diff=\(diff), orientation=\(orientation), layout=\(parent.layout)")
         
         guard parent.children.count > 1 else { 
-            appendToLog("BSPResize: Single window error")
-            parent.setResizeInProgress(false)
-            return io.err("Cannot resize single window in BSP container")
+            appendToLog("UnifiedResize: Single window - cannot resize")
+            if parent.layout == .bsp {
+                return io.err("Cannot resize single window in BSP container")
+            }
+            return false // Single window cannot be resized
         }
 
-        // Calculate weight distribution for BSP
+        // Calculate weight distribution - same logic for both BSP and tiles
         guard let childDiff = diff.div(parent.children.count - 1) else { 
-            appendToLog("BSPResize: Invalid weight distribution calculation")
-            parent.setResizeInProgress(false)
-            return io.err("Invalid weight distribution calculation")
+            appendToLog("UnifiedResize: Invalid weight distribution calculation")
+            return false 
         }
         
-        appendToLog("BSPResize: childDiff=\(childDiff)")
+        appendToLog("UnifiedResize: childDiff=\(childDiff)")
 
         // Log initial weights
         let initialWeights = parent.children.map { $0.getWeight(orientation) }
-        appendToLog("BSPResize: Initial weights: \(initialWeights)")
+        appendToLog("UnifiedResize: Initial weights: \(initialWeights)")
 
-        // Apply weight changes without normalization (BSP handles proportions at layout time)
+        // For BSP, set resize in progress flag to prevent intelligent rebalancing
+        if parent.layout == .bsp {
+            parent.setResizeInProgress(true)
+        }
+
+        // Apply weight changes - same logic for both layouts
         parent.children.lazy
             .filter { $0 != node }
             .forEach { child in
                 let oldWeight = child.getWeight(orientation)
-                let newWeight = oldWeight - childDiff
+                let newWeight = max(0.1, oldWeight - childDiff) // Ensure minimum weight
                 child.setWeight(orientation, newWeight)
-                appendToLog("BSPResize: Child weight \(oldWeight) -> \(newWeight)")
+                appendToLog("UnifiedResize: Child weight \(oldWeight) -> \(newWeight)")
             }
 
         let oldNodeWeight = node.getWeight(orientation)
-        let newNodeWeight = oldNodeWeight + diff
+        let newNodeWeight = max(0.1, oldNodeWeight + diff) // Ensure minimum weight
         node.setWeight(orientation, newNodeWeight)
-        appendToLog("BSPResize: Target node weight \(oldNodeWeight) -> \(newNodeWeight)")
+        appendToLog("UnifiedResize: Target node weight \(oldNodeWeight) -> \(newNodeWeight)")
 
-        // Log final weights before validation
-        let beforeValidationWeights = parent.children.map { $0.getWeight(orientation) }
-        appendToLog("BSPResize: Before validation weights: \(beforeValidationWeights)")
-
-        // Validate and correct BSP weights
-        let correctionsMade = parent.validateAndCorrectBSPWeights(orientation: orientation)
-        appendToLog("BSPResize: Weight validation corrections made: \(correctionsMade)")
-        
-        // Log final weights after validation
+        // Log final weights
         let finalWeights = parent.children.map { $0.getWeight(orientation) }
-        appendToLog("BSPResize: Final weights: \(finalWeights)")
+        appendToLog("UnifiedResize: Final weights: \(finalWeights)")
         
-        // Skip immediate layout update to prevent weight reset
-        appendToLog("BSPResize: Skipping immediate layout update to prevent weight reset")
+        // Clear BSP resize in progress flag
+        if parent.layout == .bsp {
+            parent.setResizeInProgress(false)
+        }
         
-        // Instead, let the system handle layout updates naturally
-        // The weights are set correctly, and the layout system should pick them up
-        
-        // Check weights immediately
-        let weightsImmediately = parent.children.map { $0.getWeight(orientation) }
-        appendToLog("BSPResize: Weights immediately after: \(weightsImmediately)")
-        
-        // Skip refreshModel() call to prevent potential recursion during resize
-        appendToLog("BSPResize: Skipping refreshModel() to prevent recursion during resize")
-        
-        // Clear resize in progress flag
-        parent.setResizeInProgress(false)
-        
-        appendToLog("BSPResize: Completed successfully")
-        return true
-    }
-
-    /// Handle resize operation for tiles layout
-    @MainActor
-    private func handleTilesResize(parent: TilingContainer, node: TreeNode, diff: CGFloat, orientation: Orientation) -> Bool {
-        guard let childDiff = diff.div(parent.children.count - 1) else { return false }
-        
-        parent.children.lazy
-            .filter { $0 != node }
-            .forEach { $0.setWeight(orientation, $0.getWeight(orientation) - childDiff) }
-
-        node.setWeight(orientation, node.getWeight(orientation) + diff)
-        
+        appendToLog("UnifiedResize: Completed successfully")
         return true
     }
 }

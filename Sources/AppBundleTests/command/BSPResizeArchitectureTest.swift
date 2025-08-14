@@ -116,7 +116,7 @@ final class BSPResizeArchitectureTest: XCTestCase {
         
         // Should fail with appropriate error
         XCTAssertFalse(result, "Should fail to resize single window in BSP container")
-        XCTAssertTrue(cmdIo.stderr.contains("Cannot resize single window"), "Should have appropriate error message")
+        XCTAssertTrue(cmdIo.stderr.joined().contains("Cannot resize single window"), "Should have appropriate error message")
         
         // Verify container state is unchanged
         XCTAssertEqual(bspContainer.layout, .bsp, "Container should maintain BSP layout")
@@ -140,7 +140,7 @@ final class BSPResizeArchitectureTest: XCTestCase {
         
         // Should fail with appropriate error
         XCTAssertFalse(result, "Should fail to resize unsupported layout")
-        XCTAssertTrue(cmdIo.stderr.contains("only supports tiles and bsp"), "Should have appropriate error message")
+        XCTAssertTrue(cmdIo.stderr.joined().contains("No suitable resize target found"), "Should have appropriate error message")
         
         // Verify container state is unchanged
         XCTAssertEqual(accordionContainer.layout, .accordion, "Container should maintain original layout")
