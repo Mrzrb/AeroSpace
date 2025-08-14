@@ -1,5 +1,25 @@
 import AppKit
 import Common
+import Foundation
+
+private func appendToLog(_ message: String) {
+    let timestamp = DateFormatter().string(from: Date())
+    let logMessage = "[\(timestamp)] \(message)\n"
+    
+    if let data = logMessage.data(using: .utf8) {
+        let url = URL(fileURLWithPath: "/tmp/aerospace.log")
+        
+        if FileManager.default.fileExists(atPath: url.path) {
+            if let fileHandle = try? FileHandle(forWritingTo: url) {
+                fileHandle.seekToEndOfFile()
+                fileHandle.write(data)
+                fileHandle.closeFile()
+            }
+        } else {
+            try? data.write(to: url)
+        }
+    }
+}
 
 class TreeNode: Equatable, AeroAny {
     private var _children: [TreeNode] = []
@@ -33,6 +53,12 @@ class TreeNode: Equatable, AeroAny {
     /// See: ``getWeight(_:)``
     func setWeight(_ targetOrientation: Orientation, _ newValue: CGFloat) {
         guard let parent else { die("Can't change weight if TreeNode doesn't have parent") }
+        
+        // Add logging to track weight changes
+        let oldWeight = adaptiveWeight
+        let stackTrace = Thread.callStackSymbols.prefix(3).joined(separator: " -> ")
+        appendToLog("SetWeight: orientation=\(targetOrientation), \(oldWeight) -> \(newValue), caller: \(stackTrace)")
+        
         switch getChildParentRelation(child: self, parent: parent) {
             case .tiling(let parent):
                 if parent.orientation == targetOrientation {
@@ -44,6 +70,7 @@ class TreeNode: Equatable, AeroAny {
                     // If orientations don't match, ignore the operation (no-op)
                     // This prevents infinite recursion and makes sense because weight
                     // only applies to the parent's orientation
+                    appendToLog("SetWeight: Ignoring weight change due to orientation mismatch")
                     return
                 }
             default:

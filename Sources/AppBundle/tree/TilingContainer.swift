@@ -1,10 +1,46 @@
 import AppKit
 import Common
+import Foundation
+
+private func appendToLog(_ message: String) {
+    let timestamp = DateFormatter().string(from: Date())
+    let logMessage = "[\(timestamp)] \(message)\n"
+    
+    if let data = logMessage.data(using: .utf8) {
+        let url = URL(fileURLWithPath: "/tmp/aerospace.log")
+        
+        if FileManager.default.fileExists(atPath: url.path) {
+            if let fileHandle = try? FileHandle(forWritingTo: url) {
+                fileHandle.seekToEndOfFile()
+                fileHandle.write(data)
+                fileHandle.closeFile()
+            }
+        } else {
+            try? data.write(to: url)
+        }
+    }
+}
 
 class TilingContainer: TreeNode, NonLeafTreeNodeObject { // todo consider renaming to GenericContainer
     fileprivate var _orientation: Orientation
     var orientation: Orientation { _orientation }
     var layout: Layout
+    
+    // Flag to temporarily disable intelligent rebalancing during resize operations
+    private var isResizeInProgress: Bool = false
+    
+    /// Check if resize is in progress
+    @MainActor
+    var resizeInProgress: Bool {
+        return isResizeInProgress
+    }
+    
+    /// Sets the resize in progress flag to prevent intelligent rebalancing
+    @MainActor
+    func setResizeInProgress(_ inProgress: Bool) {
+        isResizeInProgress = inProgress
+        appendToLog("TilingContainer: setResizeInProgress(\(inProgress)) for container with \(children.count) children")
+    }
 
     @MainActor
     init(parent: NonLeafTreeNodeObject, adaptiveWeight: CGFloat, _ orientation: Orientation, _ layout: Layout, index: Int) {
@@ -352,8 +388,12 @@ extension TilingContainer {
             optimizeTwoChildBSPContainer()
         }
 
-        // Apply intelligent rebalancing after optimization
-        intelligentBSPRebalance()
+        // Apply intelligent rebalancing after optimization (only if not in resize mode)
+        if !isResizeInProgress {
+            intelligentBSPRebalance()
+        } else {
+            appendToLog("optimizeBSPTreeStructure: Skipping intelligentBSPRebalance - resize in progress")
+        }
     }
 
     /// Intelligently rebalances BSP tree after structural changes
@@ -365,6 +405,16 @@ extension TilingContainer {
         // Skip rebalancing in test environment to preserve exact weights for testing
         let isTestEnvironment = NSClassFromString("XCTest") != nil
         guard !isTestEnvironment else { return }
+        
+        // Skip rebalancing if a resize operation is in progress
+        guard !isResizeInProgress else { 
+            appendToLog("intelligentBSPRebalance: Skipping rebalancing - resize in progress")
+            return 
+        }
+        
+        // Temporarily disable intelligent rebalancing to fix resize issues
+        appendToLog("intelligentBSPRebalance: Temporarily disabled to prevent resize conflicts")
+        return
 
         // Get current container dimensions for smart rebalancing
         let containerRect = lastAppliedLayoutVirtualRect ?? Rect(topLeftX: 0, topLeftY: 0, width: 1920, height: 1080)
@@ -376,9 +426,11 @@ extension TilingContainer {
             applyStandardRebalancing()
         }
 
-        // Recursively rebalance child containers
+        // Recursively rebalance child containers (only if not in resize mode)
         for child in children {
-            (child as? TilingContainer)?.intelligentBSPRebalance()
+            if let childContainer = child as? TilingContainer, !childContainer.resizeInProgress {
+                childContainer.intelligentBSPRebalance()
+            }
         }
     }
 
@@ -1035,31 +1087,82 @@ extension TilingContainer {
     @MainActor
     @discardableResult
     func validateAndCorrectBSPWeights(orientation: Orientation) -> Bool {
-        guard layout == .bsp else { return false }
+        guard layout == .bsp else { 
+            appendToLog("ValidateBSPWeights: Not BSP layout, skipping")
+            return false 
+        }
+        
+
+        
+        appendToLog("ValidateBSPWeights: Starting validation for orientation=\(orientation)")
         
         let minWeight: CGFloat = 0.1
-        let maxWeight: CGFloat = 0.9 * CGFloat(children.count) // Allow up to 90% of total space per child
         var correctionsMade = false
         
-        // Apply min/max constraints
-        for child in children {
+        // Log initial state
+        let initialWeights = children.map { $0.getWeight(orientation) }
+        appendToLog("ValidateBSPWeights: Initial weights: \(initialWeights)")
+        
+        // Apply minimum weight constraint only (no maximum for BSP)
+        for (index, child) in children.enumerated() {
             let currentWeight = child.getWeight(orientation)
-            let correctedWeight = max(minWeight, min(maxWeight, currentWeight))
-            
-            if abs(correctedWeight - currentWeight) > 0.001 { // Use small epsilon for float comparison
-                child.setWeight(orientation, correctedWeight)
+            if currentWeight < minWeight {
+                child.setWeight(orientation, minWeight)
                 correctionsMade = true
+                appendToLog("ValidateBSPWeights: Corrected child[\(index)] weight from \(currentWeight) to \(minWeight)")
             }
         }
         
-        // Check if total weight is reasonable
+        // Check if total weight is reasonable (only normalize if all weights are zero or negative)
         let totalWeight = children.sumOfDouble { $0.getWeight(orientation) }
-        if totalWeight <= 0 || totalWeight > Double(children.count) * 2.0 {
+        appendToLog("ValidateBSPWeights: Total weight: \(totalWeight)")
+        
+        if totalWeight <= 0 {
+            appendToLog("ValidateBSPWeights: Total weight <= 0, normalizing")
             normalizeWeights(orientation: orientation)
             correctionsMade = true
         }
         
+        // Log final state
+        let finalWeights = children.map { $0.getWeight(orientation) }
+        appendToLog("ValidateBSPWeights: Final weights: \(finalWeights), corrections made: \(correctionsMade)")
+        
         return correctionsMade
+    }
+
+    /// Triggers BSP layout update to make resize changes visible immediately
+    @MainActor
+    func triggerBSPLayoutUpdate() async {
+        guard layout == .bsp else { 
+            appendToLog("TriggerBSPLayoutUpdate: Not BSP layout, skipping")
+            return 
+        }
+        
+        appendToLog("TriggerBSPLayoutUpdate: Starting layout update")
+        
+        if let workspace = self.nodeWorkspace {
+            appendToLog("TriggerBSPLayoutUpdate: Found workspace, triggering layout")
+            
+            do {
+                try await workspace.layoutWorkspace()
+                appendToLog("TriggerBSPLayoutUpdate: layoutWorkspace() succeeded")
+            } catch {
+                appendToLog("TriggerBSPLayoutUpdate: layoutWorkspace() failed: \(error)")
+                
+                // Fallback: try to trigger layout in a delayed task
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 10_000_000) // 10ms delay
+                    do {
+                        try await workspace.layoutWorkspace()
+                        appendToLog("TriggerBSPLayoutUpdate: Delayed layoutWorkspace() succeeded")
+                    } catch {
+                        appendToLog("TriggerBSPLayoutUpdate: Delayed layoutWorkspace() also failed: \(error)")
+                    }
+                }
+            }
+        } else {
+            appendToLog("TriggerBSPLayoutUpdate: No workspace found")
+        }
     }
     
     /// Normalizes weights so they sum to a reasonable total
