@@ -19,7 +19,12 @@ struct MoveCommand: Command {
                 if parent.orientation == direction.orientation && parent.children.indices.contains(indexOfSiblingTarget) {
                     switch parent.children[indexOfSiblingTarget].tilingTreeNodeCasesOrDie() {
                         case .tilingContainer(let topLevelSiblingTargetContainer):
-                            return deepMoveIn(window: currentWindow, into: topLevelSiblingTargetContainer, moveDirection: direction)
+                            // BSP mode: use simple swap instead of deep move
+                            if parent.layout == .bsp {
+                                return swapWithContainer(window: currentWindow, container: topLevelSiblingTargetContainer)
+                            } else {
+                                return deepMoveIn(window: currentWindow, into: topLevelSiblingTargetContainer, moveDirection: direction)
+                            }
                         case .window: // "swap windows"
                             let prevBinding = currentWindow.unbindFromParent()
                             currentWindow.bind(to: parent, adaptiveWeight: prevBinding.adaptiveWeight, index: indexOfSiblingTarget)
@@ -113,8 +118,43 @@ private let moveOutMacosUnconventionalWindow = "moving macOS fullscreen, minimiz
         case .tilingContainer(let parent):
             check(parent.orientation == direction.orientation)
             guard let ownIndex = innerMostChild.ownIndex else { return false }
-            window.bind(to: parent, adaptiveWeight: WEIGHT_AUTO, index: ownIndex + direction.insertionOffset)
-            result = true
+            
+            // BSP mode: swap the window's container with the adjacent sibling
+            if parent.layout == .bsp {
+                let targetIndex = ownIndex + direction.focusOffset
+                if parent.children.indices.contains(targetIndex) {
+                    // Swap innerMostChild (container holding window) with adjacent sibling
+                    // Each element keeps its own weight, only positions are swapped
+                    let targetSibling = parent.children[targetIndex]
+                    let innerWeight = innerMostChild.getWeight(parent.orientation)
+                    let targetWeight = targetSibling.getWeight(parent.orientation)
+                    
+                    // Unbind higher index first to preserve indices
+                    if ownIndex < targetIndex {
+                        targetSibling.unbindFromParent()
+                        innerMostChild.unbindFromParent()
+                        // targetSibling goes to ownIndex (left), keeps its weight
+                        targetSibling.bind(to: parent, adaptiveWeight: targetWeight, index: ownIndex)
+                        // innerMostChild goes to targetIndex (right), keeps its weight
+                        innerMostChild.bind(to: parent, adaptiveWeight: innerWeight, index: targetIndex)
+                    } else {
+                        innerMostChild.unbindFromParent()
+                        targetSibling.unbindFromParent()
+                        // innerMostChild goes to targetIndex, keeps its weight
+                        innerMostChild.bind(to: parent, adaptiveWeight: innerWeight, index: targetIndex)
+                        // targetSibling goes to ownIndex, keeps its weight
+                        targetSibling.bind(to: parent, adaptiveWeight: targetWeight, index: ownIndex)
+                    }
+                    result = true
+                } else {
+                    // At boundary, use original behavior
+                    window.bind(to: parent, adaptiveWeight: WEIGHT_AUTO, index: ownIndex + direction.insertionOffset)
+                    result = true
+                }
+            } else {
+                window.bind(to: parent, adaptiveWeight: WEIGHT_AUTO, index: ownIndex + direction.insertionOffset)
+                result = true
+            }
         case .workspace(let parent):
             result = hitWorkspaceBoundaries(window, parent, io, args, direction, env)
         case .macosMinimizedWindowsContainer, .macosFullscreenWindowsContainer, .macosHiddenAppsWindowsContainer:
@@ -172,6 +212,39 @@ private let moveOutMacosUnconventionalWindow = "moving macOS fullscreen, minimiz
     // Apply BSP optimization after successful move
     optimizeBSPAfterWindowMove(window: window)
 
+    return true
+}
+
+/// BSP mode: swap window position with an adjacent container (simple and predictable)
+@MainActor private func swapWithContainer(window: Window, container: TilingContainer) -> Bool {
+    guard let parent = window.parent as? TilingContainer else { return false }
+    guard let windowIndex = window.ownIndex else { return false }
+    guard let containerIndex = container.ownIndex else { return false }
+    
+    // Ensure both are siblings in the same parent
+    guard container.parent === parent else { return false }
+    
+    // Get weights before unbinding - each element keeps its own weight
+    let windowWeight = window.getWeight(parent.orientation)
+    let containerWeight = container.getWeight(parent.orientation)
+    
+    // Unbind higher index first to preserve lower index positions
+    if windowIndex < containerIndex {
+        container.unbindFromParent()
+        window.unbindFromParent()
+        // container goes to windowIndex, keeps its weight
+        container.bind(to: parent, adaptiveWeight: containerWeight, index: windowIndex)
+        // window goes to containerIndex, keeps its weight
+        window.bind(to: parent, adaptiveWeight: windowWeight, index: containerIndex)
+    } else {
+        window.unbindFromParent()
+        container.unbindFromParent()
+        // window goes to containerIndex, keeps its weight
+        window.bind(to: parent, adaptiveWeight: windowWeight, index: containerIndex)
+        // container goes to windowIndex, keeps its weight
+        container.bind(to: parent, adaptiveWeight: containerWeight, index: windowIndex)
+    }
+    
     return true
 }
 

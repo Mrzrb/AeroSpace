@@ -415,15 +415,22 @@ class WindowAnimationEngine {
             return
         }
 
-        guard let currentRect = try await window.getAxRect() else {
-            throw AnimationError.windowNotFound(window.windowId)
+        // Check for existing animation - use its target as our source to prevent jitter
+        let sourceRect: Rect
+        if let existingAnimation = activeAnimations[window.windowId], existingAnimation.isActive {
+            // Use the existing animation's target position as our starting point
+            // This prevents "jitter" when rapidly changing targets
+            sourceRect = existingAnimation.targetRect
+            cancelAnimation(for: window)
+        } else {
+            guard let currentRect = try await window.getAxRect() else {
+                throw AnimationError.windowNotFound(window.windowId)
+            }
+            sourceRect = currentRect
         }
 
         let animationDuration = duration ?? config.defaultDuration
         let animationEasing = easing ?? config.easingFunction
-
-        // Cancel any existing animation for this window
-        cancelAnimation(for: window)
 
         // Check if we're at max concurrent animations
         if activeAnimations.count >= config.maxConcurrentAnimations {
@@ -437,7 +444,7 @@ class WindowAnimationEngine {
         let animationContext = getAnimationContextFromPool(
             windowId: window.windowId,
             animationType: .moveAndResize,
-            sourceRect: currentRect,
+            sourceRect: sourceRect,
             targetRect: targetRect,
             duration: animationDuration,
             easingFunction: animationEasing,
@@ -466,15 +473,22 @@ class WindowAnimationEngine {
             return
         }
 
-        guard let currentRect = try await window.getAxRect() else {
-            throw AnimationError.windowNotFound(window.windowId)
+        // Use existing animation's target size if available, otherwise get current
+        let currentSize: (width: CGFloat, height: CGFloat)
+        if let existingAnimation = activeAnimations[window.windowId], existingAnimation.isActive {
+            currentSize = (existingAnimation.targetRect.width, existingAnimation.targetRect.height)
+        } else {
+            guard let currentRect = try await window.getAxRect() else {
+                throw AnimationError.windowNotFound(window.windowId)
+            }
+            currentSize = (currentRect.width, currentRect.height)
         }
 
         let targetRect = Rect(
             topLeftX: targetPosition.x,
             topLeftY: targetPosition.y,
-            width: currentRect.width,
-            height: currentRect.height,
+            width: currentSize.width,
+            height: currentSize.height,
         )
 
         try await animateWindow(window, to: targetRect, duration: duration, easing: easing)
@@ -497,13 +511,20 @@ class WindowAnimationEngine {
             return
         }
 
-        guard let currentRect = try await window.getAxRect() else {
-            throw AnimationError.windowNotFound(window.windowId)
+        // Use existing animation's target position if available, otherwise get current
+        let currentPosition: (x: CGFloat, y: CGFloat)
+        if let existingAnimation = activeAnimations[window.windowId], existingAnimation.isActive {
+            currentPosition = (existingAnimation.targetRect.topLeftX, existingAnimation.targetRect.topLeftY)
+        } else {
+            guard let currentRect = try await window.getAxRect() else {
+                throw AnimationError.windowNotFound(window.windowId)
+            }
+            currentPosition = (currentRect.topLeftX, currentRect.topLeftY)
         }
 
         let targetRect = Rect(
-            topLeftX: currentRect.topLeftX,
-            topLeftY: currentRect.topLeftY,
+            topLeftX: currentPosition.x,
+            topLeftY: currentPosition.y,
             width: targetSize.width,
             height: targetSize.height,
         )

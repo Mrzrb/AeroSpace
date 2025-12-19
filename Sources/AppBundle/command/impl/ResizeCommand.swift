@@ -55,10 +55,12 @@ struct ResizeCommand: Command { // todo cover with tests
         }
 
         let currentWeight = preliminaryNode.getWeight(preliminaryOrientation)
+        // Interpret resize values as percentages for consistent behavior across all weight values
+        // e.g., resize +5 means "increase by 5%", resize -5 means "decrease by 5%"
         let diff: CGFloat = switch args.units.val {
-            case .set(let unit): CGFloat(unit) - currentWeight
-            case .add(let unit): CGFloat(unit)
-            case .subtract(let unit): -CGFloat(unit)
+            case .set(let unit): CGFloat(unit) - currentWeight  // Absolute set remains unchanged
+            case .add(let unit): currentWeight * CGFloat(unit) / 100.0      // Percentage increase
+            case .subtract(let unit): -currentWeight * CGFloat(unit) / 100.0 // Percentage decrease
         }
 
         // Now find the optimal resize target with the calculated diff
