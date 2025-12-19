@@ -819,4 +819,100 @@ class AnimationInterpolatorTest: XCTestCase {
         XCTAssertEqual(result.x, 0, accuracy: 0.001)
         XCTAssertEqual(result.y, 0, accuracy: 0.001)
     }
+
+    // MARK: - Overshoot Tests (Elastic/Bounce)
+
+    func testElasticEasingProducesOvershoot() {
+        // Elastic easing should produce values > 1.0 at some point (overshoot)
+        let amplitude: Float = 1.0
+        let period: Float = 0.4
+
+        var hasOvershoot = false
+        for i in 0...100 {
+            let progress = Double(i) / 100.0
+            let result = AnimationInterpolator.elastic(progress, amplitude: amplitude, period: period)
+            if result > 1.0 {
+                hasOvershoot = true
+                break
+            }
+        }
+        XCTAssertTrue(hasOvershoot, "Elastic easing should produce overshoot (values > 1.0)")
+    }
+
+    func testInterpolateRectAllowsOvershoot() {
+        // Test that interpolateRect allows progress > 1.0 for overshoot effects
+        let from = Rect(topLeftX: 0, topLeftY: 0, width: 100, height: 100)
+        let to = Rect(topLeftX: 100, topLeftY: 100, width: 200, height: 200)
+
+        // Progress > 1.0 should overshoot the target
+        let overshootResult = AnimationInterpolator.interpolateRect(from, to, progress: 1.1)
+        XCTAssertEqual(overshootResult.topLeftX, 110, accuracy: 0.001, "Should overshoot X position")
+        XCTAssertEqual(overshootResult.topLeftY, 110, accuracy: 0.001, "Should overshoot Y position")
+        XCTAssertEqual(overshootResult.width, 210, accuracy: 0.001, "Should overshoot width")
+        XCTAssertEqual(overshootResult.height, 210, accuracy: 0.001, "Should overshoot height")
+    }
+
+    func testInterpolateRectWithElasticEasing() {
+        // Simulate elastic animation: position should overshoot then settle
+        let from = Rect(topLeftX: 0, topLeftY: 0, width: 100, height: 100)
+        let to = Rect(topLeftX: 100, topLeftY: 0, width: 100, height: 100)
+        let amplitude: Float = 1.0
+        let period: Float = 0.4
+
+        // Find the overshoot point
+        var maxX: Double = 0
+        for i in 0...100 {
+            let rawProgress = Double(i) / 100.0
+            let easedProgress = AnimationInterpolator.elastic(rawProgress, amplitude: amplitude, period: period)
+            let rect = AnimationInterpolator.interpolateRect(from, to, progress: easedProgress)
+            maxX = max(maxX, rect.topLeftX)
+        }
+
+        // The max X should exceed the target (100) due to overshoot
+        XCTAssertGreaterThan(maxX, 100, "Elastic easing should cause position to overshoot target")
+
+        // Final position should be at target
+        let finalProgress = AnimationInterpolator.elastic(1.0, amplitude: amplitude, period: period)
+        let finalRect = AnimationInterpolator.interpolateRect(from, to, progress: finalProgress)
+        XCTAssertEqual(finalRect.topLeftX, 100, accuracy: 0.001, "Final position should be at target")
+    }
+
+    func testInterpolateRectPreventsNegativeSize() {
+        // Even with negative progress, size should not go below 1.0
+        let from = Rect(topLeftX: 0, topLeftY: 0, width: 100, height: 100)
+        let to = Rect(topLeftX: 100, topLeftY: 100, width: 50, height: 50)
+
+        // Extreme overshoot that would make size negative without protection
+        let result = AnimationInterpolator.interpolateRect(from, to, progress: 3.0)
+        XCTAssertGreaterThanOrEqual(result.width, 1.0, "Width should never be less than 1.0")
+        XCTAssertGreaterThanOrEqual(result.height, 1.0, "Height should never be less than 1.0")
+    }
+
+    // MARK: - Real Animation Flow Tests
+
+    func testElasticAnimationContextProducesOvershoot() {
+        // This test simulates the REAL animation flow through WindowAnimationContext
+        let from = Rect(topLeftX: 0, topLeftY: 0, width: 100, height: 100)
+        let to = Rect(topLeftX: 100, topLeftY: 0, width: 100, height: 100)
+        let elasticEasing = AnimationEasing.elastic(amplitude: 1.0, period: 0.4)
+
+        // Simulate animation at various progress points
+        var maxX: Double = 0
+        var hasOvershoot = false
+
+        // Test the easing + interpolation pipeline directly (what WindowAnimationContext.update() does)
+        for i in 0...100 {
+            let rawProgress = Double(i) / 100.0
+            let easedProgress = AnimationInterpolator.applyEasing(rawProgress, easing: elasticEasing)
+            let rect = AnimationInterpolator.interpolateRect(from, to, progress: easedProgress)
+
+            if rect.topLeftX > to.topLeftX {
+                hasOvershoot = true
+            }
+            maxX = max(maxX, rect.topLeftX)
+        }
+
+        XCTAssertTrue(hasOvershoot, "Elastic animation should produce overshoot (X > 100). Max X was: \(maxX)")
+        XCTAssertGreaterThan(maxX, 100, "Max X position should exceed target (100). Got: \(maxX)")
+    }
 }

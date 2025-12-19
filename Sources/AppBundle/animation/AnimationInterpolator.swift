@@ -172,25 +172,21 @@ enum AnimationInterpolator {
 
     /// Elastic easing with configurable amplitude and period
     static func elastic(_ progress: Double, amplitude: Float, period: Float) -> Double {
-        let clampedProgress = max(0.0, min(1.0, progress))
-        let amplitudeFactor = Double(amplitude)
-        let periodFactor = Double(period)
-
         // Handle edge cases
-        if clampedProgress == 0.0 {
+        if progress == 0.0 {
             return 0.0
         }
-        if clampedProgress == 1.0 {
+        if progress == 1.0 {
             return 1.0
         }
 
-        // Elastic easing implementation
-        // Based on Robert Penner's easing equations with configurable parameters
-        let c4 = (2.0 * Double.pi) / periodFactor
-
-        let result = -amplitudeFactor * pow(2.0, 10.0 * (clampedProgress - 1.0)) * sin((clampedProgress - 1.0) * c4) + 1.0
-
-        return result
+        let amp = Double(max(1.0, amplitude))
+        let p = Double(period)
+        
+        // Standard easeOutElastic formula
+        // Starts slow, accelerates to target, overshoots, oscillates back
+        let s = p / (2.0 * Double.pi) * asin(1.0 / amp)
+        return amp * pow(2.0, -10.0 * progress) * sin((progress - s) * (2.0 * Double.pi) / p) + 1.0
     }
 
     /// Spring physics easing with damping and initial velocity
@@ -320,18 +316,17 @@ enum AnimationInterpolator {
 
     /// Interpolate between two Rect values
     static func interpolateRect(_ from: Rect, _ to: Rect, progress: Double) -> Rect {
-        let clampedProgress = max(0.0, min(1.0, progress))
-
-        let interpolatedTopLeftX = from.topLeftX + (to.topLeftX - from.topLeftX) * clampedProgress
-        let interpolatedTopLeftY = from.topLeftY + (to.topLeftY - from.topLeftY) * clampedProgress
-        let interpolatedWidth = from.width + (to.width - from.width) * clampedProgress
-        let interpolatedHeight = from.height + (to.height - from.height) * clampedProgress
+        // Don't clamp progress - allow overshoot for elastic/bounce easing
+        let interpolatedTopLeftX = from.topLeftX + (to.topLeftX - from.topLeftX) * progress
+        let interpolatedTopLeftY = from.topLeftY + (to.topLeftY - from.topLeftY) * progress
+        let interpolatedWidth = from.width + (to.width - from.width) * progress
+        let interpolatedHeight = from.height + (to.height - from.height) * progress
 
         return Rect(
             topLeftX: interpolatedTopLeftX,
             topLeftY: interpolatedTopLeftY,
-            width: interpolatedWidth,
-            height: interpolatedHeight,
+            width: max(1.0, interpolatedWidth),  // Prevent negative/zero size
+            height: max(1.0, interpolatedHeight),
         )
     }
 
@@ -358,10 +353,17 @@ enum AnimationInterpolator {
         return max(0.0, min(1.0, elapsed / duration))
     }
 
-    /// Apply easing function to raw progress (uses CAMediaTimingFunction)
+    /// Apply easing function to raw progress
     static func applyEasing(_ rawProgress: Double, easing: AnimationEasing) -> Double {
-        let timingFunc = timingFunction(for: easing)
-        return applyTimingFunction(rawProgress, timingFunction: timingFunc)
+        switch easing {
+            case .spring, .bounce, .elastic:
+                // These need manual calculation - CAMediaTimingFunction doesn't support them
+                let easingFunc = manualEasingFunction(for: easing)
+                return easingFunc(max(0.0, min(1.0, rawProgress)))
+            default:
+                let timingFunc = timingFunction(for: easing)
+                return applyTimingFunction(rawProgress, timingFunction: timingFunc)
+        }
     }
 
     /// Apply manual easing function to raw progress (for performance comparison)
