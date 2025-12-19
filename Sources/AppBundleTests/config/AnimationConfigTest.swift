@@ -25,6 +25,18 @@ class AnimationConfigTest: XCTestCase {
         XCTAssertEqual(config.elasticPeriod, 0.3)
     }
 
+    func testAnimationDurationOneParsing() {
+        let tomlString = """
+            [animations]
+            enabled = true
+            default-duration = 1
+            """
+
+        let (config, errors) = parseConfig(tomlString)
+        XCTAssertTrue(errors.isEmpty, "Parsing should succeed: \(errors)")
+        XCTAssertEqual(config.animation.defaultDuration, 1.0, "Duration should be 1.0 second")
+    }
+
     func testAnimationConfigValidation() {
         var config = AnimationConfig()
 

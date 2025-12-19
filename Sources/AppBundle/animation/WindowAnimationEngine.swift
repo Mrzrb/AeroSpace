@@ -94,9 +94,12 @@ class WindowAnimationEngine {
     func updateConfiguration(_ newConfig: AnimationConfig) {
         let validationErrors = newConfig.validate()
         if !validationErrors.isEmpty {
-            print("Animation configuration validation errors: \(validationErrors)")
             return
         }
+
+        // Debug: write to file
+        let debugMsg = "[Animation Config] duration=\(newConfig.defaultDuration)s, enabled=\(newConfig.enabled)\n"
+        try? debugMsg.write(toFile: "/tmp/aerospace_animation_debug.log", atomically: true, encoding: .utf8)
 
         let oldConfig = self.config
 
