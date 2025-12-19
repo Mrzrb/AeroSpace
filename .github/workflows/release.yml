@@ -3,27 +3,27 @@ name: Build and Release
 on:
   push:
     tags:
-      - 'v*'  # 当推送以v开头的tag时触发
-  workflow_dispatch:  # 手动触发
+      - "v*" # 当推送以v开头的tag时触发
+  workflow_dispatch: # 手动触发
     inputs:
       version:
-        description: 'Release version (e.g., 1.0.0)'
+        description: "Release version (e.g., 1.0.0)"
         required: true
         type: string
 
 jobs:
   build-and-release:
-    runs-on: macos-15  # 使用 macos-15 确保有最新的 Xcode
-    
+    runs-on: macos-15 # 使用 macos-15 确保有最新的 Xcode
+
     steps:
       - name: Debug environment
         run: env
-        
+
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      
+
       # 设置 Xcode 版本（参考成功的 build.yml）
       - name: Setup Xcode
         run: |
@@ -33,17 +33,17 @@ jobs:
           else
             sudo xcode-select -s "$XCODE_16_DEVELOPER_DIR" # Affects macOS SDK
           fi
-      
+
       # 安装构建工具（参考成功的 build.yml）
       - name: Install build tools
         run: |
           brew update && brew install bash fish xcbeautify swiftly
           swiftly init --skip-install --assume-yes --verbose && swiftly install
-      
+
       # 安装项目依赖
       - name: Install project dependencies
         run: ./script/install-dep.sh --all
-      
+
       # 确定版本号
       - name: Determine version
         id: version
@@ -55,7 +55,7 @@ jobs:
           fi
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
           echo "Building version: $VERSION"
-      
+
       # 构建发布版本（仅在 macos-15 上构建，参考成功的 build.yml）
       - name: Build release artifacts
         run: |
@@ -63,43 +63,42 @@ jobs:
           if sw_vers -productVersion | grep -q "^15"; then
             # "-" means "Sign to run locally". There is no aerospace-codesign-certificate on GH Actions
             ./build-release.sh --build-version "${{ steps.version.outputs.VERSION }}" --codesign-identity -
-            ./install-from-sources.sh --dont-rebuild
           fi
-      
+
       # 构建失败时显示日志（参考成功的 build.yml）
       - name: Show build logs on failure
         if: ${{ always() }}
-        run: 'if test -f ./.release/xcodebuild.log; then cat ./.release/xcodebuild.log; fi'
-      
+        run: "if test -f ./.release/xcodebuild.log; then cat ./.release/xcodebuild.log; fi"
+
       # 验证构建产物
       - name: Verify build artifacts
         run: |
           echo "=== Verifying build artifacts ==="
-          
+
           # 检查文件存在
           if [ ! -f ".release/AeroSpace-v${{ steps.version.outputs.VERSION }}.zip" ]; then
             echo "❌ Release ZIP not found"
             exit 1
           fi
-          
+
           if [ ! -f ".release/aerospace" ]; then
             echo "❌ CLI binary not found"
             exit 1
           fi
-          
+
           if [ ! -d ".release/AeroSpace.app" ]; then
             echo "❌ App bundle not found"
             exit 1
           fi
-          
+
           # 显示文件信息
           echo "=== Release directory contents ==="
           ls -la .release/
-          
+
           echo "=== Binary information ==="
           file .release/aerospace
           file .release/AeroSpace.app/Contents/MacOS/AeroSpace
-          
+
           # 验证通用二进制
           echo "=== Verifying universal binaries ==="
           if file .release/aerospace | grep -q "universal binary"; then
@@ -108,63 +107,63 @@ jobs:
             echo "❌ CLI is not universal binary"
             exit 1
           fi
-          
+
           if file .release/AeroSpace.app/Contents/MacOS/AeroSpace | grep -q "universal binary"; then
             echo "✅ App is universal binary"
           else
             echo "❌ App is not universal binary"
             exit 1
           fi
-          
+
           # 验证代码签名
           echo "=== Verifying code signatures ==="
           codesign -v .release/AeroSpace.app || echo "App signature check failed"
           codesign -v .release/aerospace || echo "CLI signature check failed"
-          
+
           echo "✅ All artifacts verified successfully"
-      
+
       # 生成发布说明
       - name: Generate release notes
         id: release_notes
         run: |
           echo "Generating release notes..."
-          
+
           # 创建发布说明
           cat > release_notes.md << EOF
           ## AeroSpace v${{ steps.version.outputs.VERSION }}
-          
+
           🚀 **Built with GitHub Actions**
-          
+
           ### Build Information
           - **Version**: ${{ steps.version.outputs.VERSION }}
           - **Commit**: [\`${{ github.sha }}\`](https://github.com/${{ github.repository }}/commit/${{ github.sha }})
           - **Build Date**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
           - **Built on**: GitHub Actions (macOS-15)
-          
+
           ### What's Included
           - **AeroSpace.app** - macOS application (Universal Binary)
           - **aerospace** - Command-line interface (Universal Binary)
           - **Documentation** - Manual pages and shell completion
-          
+
           ### Installation
           1. Download \`AeroSpace-v${{ steps.version.outputs.VERSION }}.zip\`
           2. Extract the archive
           3. Move \`AeroSpace.app\` to \`/Applications/\`
           4. Optionally add \`bin/aerospace\` to your PATH
-          
+
           ### System Requirements
           - macOS 13.0 or later
           - Intel Mac or Apple Silicon Mac
-          
+
           ---
           *This release was automatically built and deployed using GitHub Actions.*
           EOF
-          
+
           # 设置输出
           echo "RELEASE_NOTES<<EOF" >> $GITHUB_OUTPUT
           cat release_notes.md >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
-      
+
       # 创建GitHub Release
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -180,7 +179,7 @@ jobs:
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      
+
       # 上传构建产物到GitHub Artifacts
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
