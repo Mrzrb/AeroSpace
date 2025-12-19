@@ -418,20 +418,29 @@ class WindowAnimationEngine {
             return
         }
 
-        // Check for existing animation - use its target as our source to prevent jitter
+        // Get source position: use interpolated position from existing animation if any,
+        // otherwise get actual position from AX API.
+        // Using interpolated position prevents "sticky" feeling when rapidly changing directions,
+        // because AX API position may lag behind the visual position during animation.
         let sourceRect: Rect
         if let existingAnimation = activeAnimations[window.windowId], existingAnimation.isActive {
-            // Use the existing animation's target position as our starting point
-            // This prevents "jitter" when rapidly changing targets
-            sourceRect = existingAnimation.targetRect
+            sourceRect = existingAnimation.getCurrentRect()
             cancelAnimation(for: window)
         } else {
-            guard let currentRect = try await window.getAxRect() else {
+            guard let axRect = try await window.getAxRect() else {
                 throw AnimationError.windowNotFound(window.windowId)
             }
-            sourceRect = currentRect
+            sourceRect = axRect
+        }
+        
+        // Skip animation if window is hidden in corner (workspace switch scenario)
+        if window.isHiddenInCorner {
+            window.setAxFrameImmediate(CGPoint(x: targetRect.topLeftX, y: targetRect.topLeftY),
+                                       CGSize(width: targetRect.width, height: targetRect.height))
+            return
         }
 
+        // Always use full duration for new animation
         let animationDuration = duration ?? config.defaultDuration
         let animationEasing = easing ?? config.easingFunction
 
@@ -476,22 +485,16 @@ class WindowAnimationEngine {
             return
         }
 
-        // Use existing animation's target size if available, otherwise get current
-        let currentSize: (width: CGFloat, height: CGFloat)
-        if let existingAnimation = activeAnimations[window.windowId], existingAnimation.isActive {
-            currentSize = (existingAnimation.targetRect.width, existingAnimation.targetRect.height)
-        } else {
-            guard let currentRect = try await window.getAxRect() else {
-                throw AnimationError.windowNotFound(window.windowId)
-            }
-            currentSize = (currentRect.width, currentRect.height)
+        // Get current size from AX API
+        guard let currentRect = try await window.getAxRect() else {
+            throw AnimationError.windowNotFound(window.windowId)
         }
 
         let targetRect = Rect(
             topLeftX: targetPosition.x,
             topLeftY: targetPosition.y,
-            width: currentSize.width,
-            height: currentSize.height,
+            width: currentRect.width,
+            height: currentRect.height,
         )
 
         try await animateWindow(window, to: targetRect, duration: duration, easing: easing)
@@ -514,20 +517,14 @@ class WindowAnimationEngine {
             return
         }
 
-        // Use existing animation's target position if available, otherwise get current
-        let currentPosition: (x: CGFloat, y: CGFloat)
-        if let existingAnimation = activeAnimations[window.windowId], existingAnimation.isActive {
-            currentPosition = (existingAnimation.targetRect.topLeftX, existingAnimation.targetRect.topLeftY)
-        } else {
-            guard let currentRect = try await window.getAxRect() else {
-                throw AnimationError.windowNotFound(window.windowId)
-            }
-            currentPosition = (currentRect.topLeftX, currentRect.topLeftY)
+        // Get current position from AX API
+        guard let currentRect = try await window.getAxRect() else {
+            throw AnimationError.windowNotFound(window.windowId)
         }
 
         let targetRect = Rect(
-            topLeftX: currentPosition.x,
-            topLeftY: currentPosition.y,
+            topLeftX: currentRect.topLeftX,
+            topLeftY: currentRect.topLeftY,
             width: targetSize.width,
             height: targetSize.height,
         )
