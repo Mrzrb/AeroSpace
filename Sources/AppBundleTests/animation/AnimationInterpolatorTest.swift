@@ -915,4 +915,72 @@ class AnimationInterpolatorTest: XCTestCase {
         XCTAssertTrue(hasOvershoot, "Elastic animation should produce overshoot (X > 100). Max X was: \(maxX)")
         XCTAssertGreaterThan(maxX, 100, "Max X position should exceed target (100). Got: \(maxX)")
     }
+
+    // MARK: - Fixed Pixel Overshoot Tests
+
+    func testInterpolateRectWithMaxOvershootPixels() {
+        let from = Rect(topLeftX: 0, topLeftY: 0, width: 100, height: 100)
+        let to = Rect(topLeftX: 500, topLeftY: 0, width: 100, height: 100)  // 500px distance
+        let maxOvershoot: Double = 20.0
+
+        // Progress 1.25 would normally overshoot by 25% = 125px
+        // But with maxOvershootPixels = 20, it should be clamped to 20px
+        let result = AnimationInterpolator.interpolateRect(from, to, progress: 1.25, maxOvershootPixels: maxOvershoot)
+
+        XCTAssertEqual(result.topLeftX, 520, accuracy: 0.001, "Overshoot should be clamped to 20px (500 + 20 = 520)")
+    }
+
+    func testInterpolateRectWithMaxOvershootPixelsSmallDistance() {
+        let from = Rect(topLeftX: 0, topLeftY: 0, width: 100, height: 100)
+        let to = Rect(topLeftX: 50, topLeftY: 0, width: 100, height: 100)  // 50px distance
+        let maxOvershoot: Double = 20.0
+
+        // Progress 1.25 would overshoot by 25% = 12.5px
+        // Since 12.5 < 20, it should NOT be clamped
+        let result = AnimationInterpolator.interpolateRect(from, to, progress: 1.25, maxOvershootPixels: maxOvershoot)
+
+        XCTAssertEqual(result.topLeftX, 62.5, accuracy: 0.001, "Small overshoot (12.5px) should not be clamped")
+    }
+
+    func testInterpolateRectWithMaxOvershootPixelsNegativeDirection() {
+        let from = Rect(topLeftX: 500, topLeftY: 0, width: 100, height: 100)
+        let to = Rect(topLeftX: 0, topLeftY: 0, width: 100, height: 100)  // Moving left 500px
+        let maxOvershoot: Double = 20.0
+
+        // Progress 1.25 would overshoot by 125px in negative direction
+        // Should be clamped to -20px from target
+        let result = AnimationInterpolator.interpolateRect(from, to, progress: 1.25, maxOvershootPixels: maxOvershoot)
+
+        XCTAssertEqual(result.topLeftX, -20, accuracy: 0.001, "Negative overshoot should be clamped to -20px")
+    }
+
+    func testInterpolateRectWithZeroMaxOvershootPixels() {
+        let from = Rect(topLeftX: 0, topLeftY: 0, width: 100, height: 100)
+        let to = Rect(topLeftX: 500, topLeftY: 0, width: 100, height: 100)
+
+        // With maxOvershootPixels = 0, overshoot should be unlimited (percentage-based)
+        let result = AnimationInterpolator.interpolateRect(from, to, progress: 1.25, maxOvershootPixels: 0)
+
+        XCTAssertEqual(result.topLeftX, 625, accuracy: 0.001, "With maxOvershootPixels=0, overshoot should be unlimited (25% = 125px)")
+    }
+
+    func testElasticWithFixedPixelOvershoot() {
+        // Simulate real elastic animation with fixed pixel overshoot
+        let from = Rect(topLeftX: 0, topLeftY: 0, width: 100, height: 100)
+        let to = Rect(topLeftX: 500, topLeftY: 0, width: 100, height: 100)
+        let elasticEasing = AnimationEasing.elastic(amplitude: 1.0, period: 0.4)
+        let maxOvershoot: Double = 30.0
+
+        var maxX: Double = 0
+        for i in 0...100 {
+            let rawProgress = Double(i) / 100.0
+            let easedProgress = AnimationInterpolator.applyEasing(rawProgress, easing: elasticEasing)
+            let rect = AnimationInterpolator.interpolateRect(from, to, progress: easedProgress, maxOvershootPixels: maxOvershoot)
+            maxX = max(maxX, rect.topLeftX)
+        }
+
+        // Max overshoot should be clamped to target + maxOvershoot
+        XCTAssertLessThanOrEqual(maxX, 530, "Max X should not exceed target + maxOvershoot (500 + 30 = 530)")
+        XCTAssertGreaterThan(maxX, 500, "Should still have some overshoot")
+    }
 }

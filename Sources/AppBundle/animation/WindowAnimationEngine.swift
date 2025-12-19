@@ -460,6 +460,7 @@ class WindowAnimationEngine {
             targetRect: targetRect,
             duration: animationDuration,
             easingFunction: animationEasing,
+            maxOvershootPixels: config.maxOvershootPixels
         )
 
         activeAnimations[window.windowId] = animationContext
@@ -798,6 +799,7 @@ class WindowAnimationEngine {
         easingFunction: AnimationEasing,
         sourceOpacity: Double? = nil,
         targetOpacity: Double? = nil,
+        maxOvershootPixels: Double = 0
     ) -> WindowAnimationContext {
         if let pooledContext = animationContextPool.popLast() {
             // Reuse pooled context
@@ -810,6 +812,7 @@ class WindowAnimationEngine {
                 easingFunction: easingFunction,
                 sourceOpacity: sourceOpacity,
                 targetOpacity: targetOpacity,
+                maxOvershootPixels: maxOvershootPixels
             )
             return pooledContext
         } else {
@@ -823,6 +826,7 @@ class WindowAnimationEngine {
                 easingFunction: easingFunction,
                 sourceOpacity: sourceOpacity,
                 targetOpacity: targetOpacity,
+                maxOvershootPixels: maxOvershootPixels
             )
         }
     }

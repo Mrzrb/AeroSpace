@@ -441,6 +441,7 @@ private let animationConfigParser: [String: any ParserProtocol<AnimationConfig>]
     "bounce-intensity": Parser(\.bounceIntensity, parseFloat),
     "elastic-amplitude": Parser(\.elasticAmplitude, parseFloat),
     "elastic-period": Parser(\.elasticPeriod, parseFloat),
+    "max-overshoot-pixels": Parser(\.maxOvershootPixels, parseDouble),
     "gpu-acceleration-enabled": Parser(\.gpuAccelerationEnabled, parseBool),
     "gpu-acceleration-mode": Parser(\.gpuAccelerationMode, parseGPUAccelerationMode),
     "gpu-batch-size": Parser(\.gpuBatchSize, parseInt),

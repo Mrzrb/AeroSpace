@@ -315,17 +315,41 @@ enum AnimationInterpolator {
     }
 
     /// Interpolate between two Rect values
-    static func interpolateRect(_ from: Rect, _ to: Rect, progress: Double) -> Rect {
-        // Don't clamp progress - allow overshoot for elastic/bounce easing
-        let interpolatedTopLeftX = from.topLeftX + (to.topLeftX - from.topLeftX) * progress
-        let interpolatedTopLeftY = from.topLeftY + (to.topLeftY - from.topLeftY) * progress
-        let interpolatedWidth = from.width + (to.width - from.width) * progress
-        let interpolatedHeight = from.height + (to.height - from.height) * progress
+    static func interpolateRect(_ from: Rect, _ to: Rect, progress: Double, maxOvershootPixels: Double = 0) -> Rect {
+        var interpolatedTopLeftX: Double
+        var interpolatedTopLeftY: Double
+        
+        if progress > 1.0 && maxOvershootPixels > 0 {
+            // Clamp overshoot to fixed pixel value
+            let overshootRatio = progress - 1.0
+            
+            let distanceX = to.topLeftX - from.topLeftX
+            let distanceY = to.topLeftY - from.topLeftY
+            
+            let overshootX = overshootRatio * distanceX
+            let overshootY = overshootRatio * distanceY
+            
+            // Clamp each axis independently, preserving direction
+            let signX = overshootX >= 0 ? 1.0 : -1.0
+            let signY = overshootY >= 0 ? 1.0 : -1.0
+            let clampedOvershootX = distanceX != 0 ? signX * min(abs(overshootX), maxOvershootPixels) : 0
+            let clampedOvershootY = distanceY != 0 ? signY * min(abs(overshootY), maxOvershootPixels) : 0
+            
+            interpolatedTopLeftX = to.topLeftX + clampedOvershootX
+            interpolatedTopLeftY = to.topLeftY + clampedOvershootY
+        } else {
+            // Normal interpolation (including overshoot when maxOvershootPixels = 0)
+            interpolatedTopLeftX = from.topLeftX + (to.topLeftX - from.topLeftX) * progress
+            interpolatedTopLeftY = from.topLeftY + (to.topLeftY - from.topLeftY) * progress
+        }
+        
+        let interpolatedWidth = from.width + (to.width - from.width) * min(1.0, progress)
+        let interpolatedHeight = from.height + (to.height - from.height) * min(1.0, progress)
 
         return Rect(
             topLeftX: interpolatedTopLeftX,
             topLeftY: interpolatedTopLeftY,
-            width: max(1.0, interpolatedWidth),  // Prevent negative/zero size
+            width: max(1.0, interpolatedWidth),
             height: max(1.0, interpolatedHeight),
         )
     }

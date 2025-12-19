@@ -28,6 +28,9 @@ struct AnimationConfig: ConvenienceCopyable {
     // Elastic animation settings
     var elasticAmplitude: Float = 0.5
     var elasticPeriod: Float = 0.3
+    
+    // Overshoot settings
+    var maxOvershootPixels: Double = 30.0  // Maximum overshoot in pixels (0 = unlimited/percentage-based)
 
     // GPU acceleration settings
     var gpuAccelerationEnabled: Bool = true

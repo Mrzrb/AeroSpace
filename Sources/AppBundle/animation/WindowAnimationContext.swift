@@ -24,6 +24,7 @@ class WindowAnimationContext {
     var startTime: Date
     var duration: TimeInterval
     var easingFunction: AnimationEasing
+    var maxOvershootPixels: Double
 
     var sourceRect: Rect
     var targetRect: Rect
@@ -83,7 +84,8 @@ class WindowAnimationContext {
         easingFunction: AnimationEasing = .easeOut,
         startTime: Date = Date(),
         sourceOpacity: Double? = nil,
-        targetOpacity: Double? = nil
+        targetOpacity: Double? = nil,
+        maxOvershootPixels: Double = 0
     ) {
         self.windowId = windowId
         self.animationType = animationType
@@ -94,6 +96,7 @@ class WindowAnimationContext {
         self.startTime = startTime
         self.sourceOpacity = sourceOpacity
         self.targetOpacity = targetOpacity
+        self.maxOvershootPixels = maxOvershootPixels
     }
 
     // MARK: - Animation Lifecycle Methods
@@ -114,6 +117,7 @@ class WindowAnimationContext {
         easingFunction: AnimationEasing,
         sourceOpacity: Double? = nil,
         targetOpacity: Double? = nil,
+        maxOvershootPixels: Double = 0
     ) {
         // Update all properties for reuse
         self.windowId = windowId
@@ -124,6 +128,7 @@ class WindowAnimationContext {
         self.easingFunction = easingFunction
         self.sourceOpacity = sourceOpacity
         self.targetOpacity = targetOpacity
+        self.maxOvershootPixels = maxOvershootPixels
         self.startTime = Date()
 
         // Reset state
@@ -161,7 +166,7 @@ class WindowAnimationContext {
         }
 
         let easedProgress = AnimationInterpolator.applyEasing(rawProgress, easing: easingFunction)
-        return AnimationInterpolator.interpolateRect(sourceRect, targetRect, progress: easedProgress)
+        return AnimationInterpolator.interpolateRect(sourceRect, targetRect, progress: easedProgress, maxOvershootPixels: maxOvershootPixels)
     }
 
     /// Complete the animation immediately
@@ -186,7 +191,7 @@ class WindowAnimationContext {
 
         let rawProgress = currentProgress
         let easedProgress = AnimationInterpolator.applyEasing(rawProgress, easing: easingFunction)
-        return AnimationInterpolator.interpolateRect(sourceRect, targetRect, progress: easedProgress)
+        return AnimationInterpolator.interpolateRect(sourceRect, targetRect, progress: easedProgress, maxOvershootPixels: maxOvershootPixels)
     }
 
     /// Get the current interpolated position
