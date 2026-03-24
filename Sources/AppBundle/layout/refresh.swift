@@ -140,6 +140,9 @@ enum OptimalHideCorner {
     case bottomLeftCorner, bottomRightCorner
 }
 
+// Track previous visible workspaces for transition animation
+@MainActor private var previousVisibleWorkspaces: Set<String> = []
+
 @MainActor
 private func layoutWorkspaces() async throws {
     if !TrayMenuModel.shared.isEnabled {
@@ -175,16 +178,71 @@ private func layoutWorkspaces() async throws {
         monitorToOptimalHideCorner[monitor.rect.topLeftCorner] = corner
     }
 
-    // to reduce flicker, first unhide visible workspaces, then hide invisible ones
-    for monitor in monitors {
-        let workspace = monitor.activeWorkspace
-        workspace.allLeafWindowsRecursive.forEach { ($0 as! MacWindow).unhideFromCorner() } // todo as!
-        try await workspace.layoutWorkspace()
+    // Detect workspace changes for transition animation
+    let currentVisibleWorkspaces = Set(monitors.map { $0.activeWorkspace.name })
+    let newlyVisibleWorkspaces = currentVisibleWorkspaces.subtracting(previousVisibleWorkspaces)
+    let newlyHiddenWorkspaces = previousVisibleWorkspaces.subtracting(currentVisibleWorkspaces)
+    let isWorkspaceSwitch = !newlyVisibleWorkspaces.isEmpty || !newlyHiddenWorkspaces.isEmpty
+    
+    // Update tracking
+    previousVisibleWorkspaces = currentVisibleWorkspaces
+
+    // Workspace transition animation
+    if isWorkspaceSwitch && config.animation.enabled && config.animation.workspaceTransitionAnimationEnabled {
+        // Step 1: Animate out windows from newly hidden workspaces
+        for workspaceName in newlyHiddenWorkspaces {
+            if let workspace = Workspace.all.first(where: { $0.name == workspaceName }) {
+                for window in workspace.allLeafWindowsRecursive {
+                    if let macWindow = window as? MacWindow {
+                        try? await WindowAnimationEngine.shared.animateWindowFadeOut(macWindow)
+                    }
+                }
+            }
+        }
+        
+        // Step 2: Position newly visible windows at their target locations (hidden)
+        for monitor in monitors {
+            let workspace = monitor.activeWorkspace
+            if newlyVisibleWorkspaces.contains(workspace.name) {
+                // First, set windows to target position but invisible
+                for window in workspace.allLeafWindowsRecursive {
+                    (window as! MacWindow).unhideFromCorner()
+                }
+            }
+        }
+        
+        // Step 3: Layout all visible workspaces
+        for monitor in monitors {
+            let workspace = monitor.activeWorkspace
+            workspace.allLeafWindowsRecursive.forEach { ($0 as! MacWindow).unhideFromCorner() }
+            try await workspace.layoutWorkspace()
+        }
+        
+        // Step 4: Animate in windows for newly visible workspaces
+        for monitor in monitors {
+            let workspace = monitor.activeWorkspace
+            if newlyVisibleWorkspaces.contains(workspace.name) {
+                for window in workspace.allLeafWindowsRecursive {
+                    if let macWindow = window as? MacWindow {
+                        try? await WindowAnimationEngine.shared.animateWindowFadeIn(macWindow)
+                    }
+                }
+            }
+        }
+    } else {
+        // Normal layout without workspace transition animation
+        for monitor in monitors {
+            let workspace = monitor.activeWorkspace
+            workspace.allLeafWindowsRecursive.forEach { ($0 as! MacWindow).unhideFromCorner() }
+            try await workspace.layoutWorkspace()
+        }
     }
+    
+    // Hide windows in invisible workspaces
     for workspace in Workspace.all where !workspace.isVisible {
         let corner = monitorToOptimalHideCorner[workspace.workspaceMonitor.rect.topLeftCorner] ?? .bottomRightCorner
         for window in workspace.allLeafWindowsRecursive {
-            try await (window as! MacWindow).hideInCorner(corner) // todo as!
+            try await (window as! MacWindow).hideInCorner(corner)
         }
     }
 }

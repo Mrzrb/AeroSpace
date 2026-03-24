@@ -30,27 +30,42 @@ open class Window: TreeNode, Hashable {
         hasher.combine(windowId)
     }
 
+    @MainActor // todo swift is stupid
     func getAxSize() async throws -> CGSize? { die("Not implemented") }
+    @MainActor // todo swift is stupid
     var title: String { get async throws { die("Not implemented") } }
+    @MainActor // todo swift is stupid
     var isMacosFullscreen: Bool { get async throws { false } }
-    var isMacosMinimized: Bool { get async throws { false } } // todo replace with enum MacOsWindowNativeState { normal, fullscreen, invisible }
+    @MainActor // todo swift is stupid
+    var isMacosMinimized: Bool { get async throws { false } }
     var isHiddenInCorner: Bool { die("Not implemented") }
     @MainActor
     func nativeFocus() { die("Not implemented") }
+    @MainActor // todo can be dropped in future Swift versions
     func getAxRect() async throws -> Rect? { die("Not implemented") }
+    @MainActor // todo can be dropped in future Swift versions
     func getCenter() async throws -> CGPoint? { try await getAxRect()?.center }
+    @MainActor // todo can be dropped in future Swift versions
+    func getAxTopLeftCorner() async throws -> CGPoint? { try await getAxRect()?.topLeftCorner }
 
-    func setAxFrame(_ topLeft: CGPoint?, _ size: CGSize?) { die("Not implemented") }
+    @MainActor func setAxTopLeftCorner(_ point: CGPoint) { die("Not implemented") }
+    @MainActor func setAxFrame(_ topLeft: CGPoint?, _ size: CGSize?) { die("Not implemented") }
+    func setAxFrameBlocking(_ topLeft: CGPoint?, _ size: CGSize?) async throws { die("Not implemented") }
+    @MainActor func setSizeAsync(_ size: CGSize) { die("Not implemented") }
+
+    @MainActor func setAxTopLeftCornerImmediate(_ point: CGPoint) { die("Not implemented") }
+    @MainActor func setAxFrameImmediate(_ topLeft: CGPoint?, _ size: CGSize?) { die("Not implemented") }
+    @MainActor func setSizeAsyncImmediate(_ size: CGSize) { die("Not implemented") }
+    @MainActor func setAxAlphaImmediate(_ alpha: Double) { die("Not implemented") }
 }
 
 enum LayoutReason: Equatable {
     case standard
-    /// Reason for the cur temp layout is macOS native fullscreen, minimize, or hide
     case macos(prevParentKind: NonLeafTreeNodeKind)
 }
 
 extension Window {
-    var isFloating: Bool { parent is Workspace } // todo drop. It will be a source of bugs when sticky is introduced
+    var isFloating: Bool { parent is Workspace }
 
     @discardableResult
     @MainActor

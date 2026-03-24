@@ -1,0 +1,184 @@
+# Advanced Visual Effects Configuration Example
+# This configuration showcases the full potential of AeroSpace's animation and visual effects system
+# Copy this to ~/.aerospace.toml and customize to your preferences
+
+# Basic AeroSpace settings
+start-at-login = true
+enable-normalization-flatten-containers = true
+enable-normalization-opposite-orientation-for-nested-containers = true
+accordion-padding = 20
+default-root-container-layout = 'tiles'
+default-root-container-orientation = 'auto'
+on-focused-monitor-changed = ['move-mouse monitor-lazy-center']
+automatically-unhide-macos-hidden-apps = false
+
+[key-mapping]
+    preset = 'qwerty'
+
+[gaps]
+    inner.horizontal = 8
+    inner.vertical = 8
+    outer.left = 8
+    outer.bottom = 8
+    outer.top = 8
+    outer.right = 8
+
+[bsp]
+    split-ratio = 0.5
+    auto-split-threshold = 1.2
+    preferred-split-direction = 'auto'
+
+# High-performance animation configuration with GPU acceleration
+[animations]
+    enabled = true
+    default-duration = 0.2
+    easing-function = 'spring(0.8, 0.0)'  # Smooth spring animation
+    respect-system-preferences = true
+    
+    # Enable all animation types
+    move-animation-enabled = true
+    resize-animation-enabled = true
+    layout-change-animation-enabled = true
+    workspace-transition-animation-enabled = true
+    
+    # High-performance settings
+    max-concurrent-animations = 15
+    adaptive-quality = true
+    min-frame-rate = 45.0
+    
+    # GPU acceleration for smooth performance
+    gpu-acceleration-enabled = true
+    gpu-acceleration-mode = 'automatic'
+    gpu-batch-size = 64
+    gpu-fallback-threshold = 0.85
+    
+    # Advanced easing parameters
+    spring-damping = 0.8
+    spring-velocity = 0.0
+    bounce-intensity = 1.2
+    elastic-amplitude = 0.6
+    elastic-period = 0.25
+
+# Full visual effects configuration
+[visual-effects]
+    enabled = true
+    adaptive-quality = true
+    performance-threshold = 13.33  # ~75fps threshold
+    max-concurrent-effects = 12
+    effect-quality-level = 'high'
+    enable-gpu-acceleration = true
+    
+    # Motion blur for fast window movements
+    [visual-effects.motion-blur]
+        enabled = true
+        velocity-threshold = 80.0
+        max-speed = 1200.0
+        max-intensity = 0.9
+        automatic-effects = true
+    
+    # Afterimage trails
+    [visual-effects.afterimage]
+        enabled = true
+        trail-length = 7
+        opacity-decay = 0.75
+        update-interval = 0.025  # ~40fps for smooth trails
+    
+    # Enhanced particle effects
+    [visual-effects.particles]
+        enabled = true
+        count = 25
+        size-width = 5.0
+        size-height = 5.0
+        duration = 1.2
+        spread = 60.0
+        velocity = 120.0
+        available-types = ['spark', 'bubble', 'star', 'geometric']
+        default-type = 'geometric'
+    
+    # Ripple effects for multi-window operations
+    [visual-effects.ripple]
+        enabled = true
+        speed = 350.0
+        max-radius = 250.0
+        duration = 0.9
+        intensity = 0.7
+
+# Enhanced key bindings with visual feedback
+[mode.main.binding]
+    # Layout switching with smooth transitions
+    alt-slash = 'layout tiles horizontal vertical'
+    alt-comma = 'layout accordion horizontal vertical'
+    alt-period = 'layout bsp'
+    
+    # Window focus with subtle effects
+    alt-h = 'focus left'
+    alt-j = 'focus down'
+    alt-k = 'focus up'
+    alt-l = 'focus right'
+    
+    # Window movement with enhanced animations
+    alt-shift-h = 'move left'
+    alt-shift-j = 'move down'
+    alt-shift-k = 'move up'
+    alt-shift-l = 'move right'
+    
+    # Resizing with smooth feedback
+    alt-minus = 'resize smart -50'
+    alt-equal = 'resize smart +50'
+    
+    # Workspace navigation
+    alt-1 = 'workspace 1'
+    alt-2 = 'workspace 2'
+    alt-3 = 'workspace 3'
+    alt-4 = 'workspace 4'
+    alt-5 = 'workspace 5'
+    alt-6 = 'workspace 6'
+    alt-7 = 'workspace 7'
+    alt-8 = 'workspace 8'
+    alt-9 = 'workspace 9'
+    
+    # Window to workspace movement
+    alt-shift-1 = 'move-node-to-workspace 1'
+    alt-shift-2 = 'move-node-to-workspace 2'
+    alt-shift-3 = 'move-node-to-workspace 3'
+    alt-shift-4 = 'move-node-to-workspace 4'
+    alt-shift-5 = 'move-node-to-workspace 5'
+    alt-shift-6 = 'move-node-to-workspace 6'
+    alt-shift-7 = 'move-node-to-workspace 7'
+    alt-shift-8 = 'move-node-to-workspace 8'
+    alt-shift-9 = 'move-node-to-workspace 9'
+    
+    # Quick workspace switching
+    alt-tab = 'workspace-back-and-forth'
+    alt-shift-tab = 'move-workspace-to-monitor --wrap-around next'
+    
+    # Service mode
+    alt-shift-semicolon = 'mode service'
+
+[mode.service.binding]
+    esc = ['reload-config', 'mode main']
+    r = ['flatten-workspace-tree', 'mode main']
+    f = ['layout floating tiling', 'mode main']
+    backspace = ['close-all-windows-but-current', 'mode main']
+    
+    # Window joining with visual effects
+    alt-shift-h = ['join-with left', 'mode main']
+    alt-shift-j = ['join-with down', 'mode main']
+    alt-shift-k = ['join-with up', 'mode main']
+    alt-shift-l = ['join-with right', 'mode main']
+    
+    # System controls
+    down = 'volume down'
+    up = 'volume up'
+    shift-down = ['volume set 0', 'mode main']
+
+# Performance optimization notes:
+# 1. This configuration is optimized for modern Macs with discrete GPUs
+# 2. For older hardware, consider:
+#    - Reducing particle count to 15-20
+#    - Setting effect-quality-level to 'medium'
+#    - Disabling motion blur or afterimage effects
+# 3. For battery-powered devices, consider:
+#    - Setting gpu-acceleration-mode to 'automatic'
+#    - Reducing max-concurrent-animations to 8
+#    - Lowering performance-threshold to 20.0 (50fps)

@@ -10,7 +10,7 @@ include::util/man-attributes.adoc[]
 [verse]
 // tag::synopsis[]
 aerospace layout [-h|--help] [--window-id <window-id>]
-                 (h_tiles|v_tiles|h_accordion|v_accordion|tiles|accordion|horizontal|vertical|tiling|floating)...
+                 (h_tiles|v_tiles|h_accordion|v_accordion|h_bsp|v_bsp|tiles|accordion|bsp|horizontal|vertical|tiling|floating)...
 
 // end::synopsis[]
 
@@ -22,8 +22,18 @@ aerospace layout [-h|--help] [--window-id <window-id>]
 
 If several arguments are supplied then finds the first argument that doesn't describe the currently active layout, and applies the layout.
 
-* Change both tiling layout and orientation in one go: `h_tiles|v_tiles|h_accordion|v_accordion`
-* Change tiling layout but preserve orientation: `tiles|accordion`
+*Layout Types:*
+
+* `tiles` - Traditional tiling layout where windows are arranged in a grid
+* `accordion` - Layout where windows are stacked and can be expanded/collapsed
+* `bsp` - Binary Space Partitioning layout that recursively splits space into binary tree structure, similar to i3wm. New windows intelligently split existing space based on container dimensions
+* `floating` - Windows float freely and can be positioned anywhere
+* `tiling` - Generic tiling mode (preserves current tiling layout)
+
+*Layout Options:*
+
+* Change both tiling layout and orientation in one go: `h_tiles|v_tiles|h_accordion|v_accordion|h_bsp|v_bsp`
+* Change tiling layout but preserve orientation: `tiles|accordion|bsp`
 * Change orientation but preserve layout: `horizontal|vertical`
 * Toggle floating/tiling mode: `tiling|floating`
 
@@ -49,6 +59,18 @@ include::util/conditional-examples-header.adoc[]
 
 * Switch to `tiles` layout. Toggle the layout orientation if already in `tiles` layout: +
 `aerospace layout tiles horizontal vertical`
+
+* Toggle between `tiles`, `accordion`, and `bsp` layouts (order of args doesn't matter): +
+`aerospace layout tiles accordion bsp`
+
+* Switch to horizontal BSP layout: +
+`aerospace layout h_bsp`
+
+* Switch to vertical BSP layout: +
+`aerospace layout v_bsp`
+
+* Switch to BSP layout and toggle orientation if already in BSP: +
+`aerospace layout bsp horizontal vertical`
 
 // end::body[]
 

@@ -47,10 +47,10 @@ private func resizeWithMouse(_ window: Window) async throws { // todo cover with
         case .tilingContainer:
             guard let rect = try await window.getAxRect() else { return }
             guard let lastAppliedLayoutRect = window.lastAppliedLayoutPhysicalRect else { return }
-            let (lParent, lOwnIndex) = window.closestParent(hasChildrenInDirection: .left, withLayout: .tiles) ?? (nil, nil)
-            let (dParent, dOwnIndex) = window.closestParent(hasChildrenInDirection: .down, withLayout: .tiles) ?? (nil, nil)
-            let (uParent, uOwnIndex) = window.closestParent(hasChildrenInDirection: .up, withLayout: .tiles) ?? (nil, nil)
-            let (rParent, rOwnIndex) = window.closestParent(hasChildrenInDirection: .right, withLayout: .tiles) ?? (nil, nil)
+            let (lParent, lOwnIndex) = window.closestParent(hasChildrenInDirection: .left, withLayout: nil) ?? (nil, nil)
+            let (dParent, dOwnIndex) = window.closestParent(hasChildrenInDirection: .down, withLayout: nil) ?? (nil, nil)
+            let (uParent, uOwnIndex) = window.closestParent(hasChildrenInDirection: .up, withLayout: nil) ?? (nil, nil)
+            let (rParent, rOwnIndex) = window.closestParent(hasChildrenInDirection: .right, withLayout: nil) ?? (nil, nil)
             let table: [(CGFloat, TilingContainer?, Int?, Int?)] = [
                 (lastAppliedLayoutRect.minX - rect.minX, lParent, 0,                        lOwnIndex),               // Horizontal, to the left of the window
                 (rect.maxY - lastAppliedLayoutRect.maxY, dParent, dOwnIndex.map { $0 + 1 }, dParent?.children.count), // Vertical, to the down of the window
@@ -62,19 +62,87 @@ private func resizeWithMouse(_ window: Window) async throws { // todo cover with
                     let siblingDiff = diff.div(pastTheEndIndex - startIndex).orDie()
                     let orientation = parent.orientation
 
-                    window.parentsWithSelf.lazy
-                        .prefix(while: { $0 != parent })
-                        .filter {
-                            let parent = $0.parent as? TilingContainer
-                            return parent?.orientation == orientation && parent?.layout == .tiles
+                    // Handle BSP layout differently from tiles layout
+                    if parent.layout == .bsp {
+                        // For BSP layout, we need to adjust weights proportionally
+                        // because BSP uses proportional sizing (weight / totalWeight)
+                        handleBSPMouseResize(window: window, parent: parent, diff: diff, orientation: orientation, startIndex: startIndex, pastTheEndIndex: pastTheEndIndex)
+                    } else {
+                        // Original logic for tiles layout
+                        window.parentsWithSelf.lazy
+                            .prefix(while: { $0 != parent })
+                            .filter {
+                                let parent = $0.parent as? TilingContainer
+                                return parent?.orientation == orientation && parent?.layout == .tiles
+                            }
+                            .forEach { $0.setWeight(orientation, $0.getWeightBeforeResize(orientation) + diff) }
+                        for sibling in parent.children[startIndex ..< pastTheEndIndex] {
+                            sibling.setWeight(orientation, sibling.getWeightBeforeResize(orientation) - siblingDiff)
                         }
-                        .forEach { $0.setWeight(orientation, $0.getWeightBeforeResize(orientation) + diff) }
-                    for sibling in parent.children[startIndex ..< pastTheEndIndex] {
-                        sibling.setWeight(orientation, sibling.getWeightBeforeResize(orientation) - siblingDiff)
                     }
                 }
             }
             currentlyManipulatedWithMouseWindowId = window.windowId
+    }
+}
+
+@MainActor
+private func handleBSPMouseResize(
+    window: Window,
+    parent: TilingContainer,
+    diff: CGFloat,
+    orientation: Orientation,
+    startIndex: Int,
+    pastTheEndIndex: Int
+) {
+    // For BSP layout, we need to handle proportional weight adjustments
+    // Get the current container dimensions to calculate proportional changes
+    guard let containerRect = parent.lastAppliedLayoutVirtualRect else { return }
+    
+    let containerSize = containerRect.getDimension(orientation)
+    guard containerSize > 0 else { return }
+    
+    // Calculate the proportional change based on pixel difference
+    let proportionalChange = diff / containerSize
+    
+    // Find the target window in the parent's children
+    let targetWindows = window.parentsWithSelf.lazy
+        .prefix(while: { $0 != parent })
+        .filter {
+            let parent = $0.parent as? TilingContainer
+            return parent?.orientation == orientation && parent?.layout == .bsp
+        }
+    
+    // Get current total weight for proportional calculations
+    let currentTotalWeight = parent.children.sumOfDouble { $0.getWeightBeforeResize(orientation) }
+    guard currentTotalWeight > 0 else { return }
+    
+    // Adjust weights proportionally
+    for targetWindow in targetWindows {
+        let currentWeight = targetWindow.getWeightBeforeResize(orientation)
+        let currentProportion = currentWeight / currentTotalWeight
+        
+        // Calculate new weight based on proportional change
+        let newProportion = currentProportion + proportionalChange
+        let newWeight = max(0.1, newProportion * currentTotalWeight) // Ensure minimum weight
+        
+        targetWindow.setWeight(orientation, newWeight)
+    }
+    
+    // Adjust sibling weights to compensate
+    let siblingCount = pastTheEndIndex - startIndex
+    if siblingCount > 0 {
+        let siblingProportionalChange = -proportionalChange / CGFloat(siblingCount)
+        
+        for sibling in parent.children[startIndex ..< pastTheEndIndex] {
+            let currentWeight = sibling.getWeightBeforeResize(orientation)
+            let currentProportion = currentWeight / currentTotalWeight
+            
+            let newProportion = currentProportion + siblingProportionalChange
+            let newWeight = max(0.1, newProportion * currentTotalWeight) // Ensure minimum weight
+            
+            sibling.setWeight(orientation, newWeight)
+        }
     }
 }
 

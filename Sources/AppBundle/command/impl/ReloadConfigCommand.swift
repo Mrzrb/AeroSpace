@@ -35,6 +35,9 @@ struct ReloadConfigCommand: Command {
                 try await activateMode(activeMode)
                 syncStartAtLogin()
                 MessageModel.shared.message = nil
+
+                // Update animation engine with new configuration
+                WindowAnimationEngine.shared.updateConfiguration(parsedConfig.animation)
             }
             result = true
         case .failure(let msg):

@@ -29,6 +29,7 @@ public enum CmdKind: String, CaseIterable, Equatable, Sendable {
     case moveNodeToMonitor = "move-node-to-monitor"
     case moveNodeToWorkspace = "move-node-to-workspace"
     case moveWorkspaceToMonitor = "move-workspace-to-monitor"
+    case optimizeBSP = "optimize-bsp"
     case reloadConfig = "reload-config"
     case resize
     case split
@@ -105,6 +106,8 @@ func initSubcommands() -> [String: any SubCommandParserProtocol] {
                 result[kind.rawValue] = SubCommandParser(parseWorkspaceToMonitorCmdArgs)
                 // deprecated
                 result["move-workspace-to-display"] = SubCommandParser(MoveWorkspaceToMonitorCmdArgs.init)
+            case .optimizeBSP:
+                result[kind.rawValue] = SubCommandParser(OptimizeBSPCmdArgs.init)
             case .reloadConfig:
                 result[kind.rawValue] = SubCommandParser(ReloadConfigCmdArgs.init)
             case .resize:

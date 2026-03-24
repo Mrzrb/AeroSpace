@@ -3,7 +3,7 @@ import Common
 
 struct MoveCommand: Command {
     let args: MoveCmdArgs
-    /*conforms*/ let shouldResetClosedWindowsCache = true
+    /*conforms*/ var shouldResetClosedWindowsCache = true
 
     func run(_ env: CmdEnv, _ io: CmdIo) -> Bool {
         let direction = args.direction.val
@@ -19,7 +19,12 @@ struct MoveCommand: Command {
                 if parent.orientation == direction.orientation && parent.children.indices.contains(indexOfSiblingTarget) {
                     switch parent.children[indexOfSiblingTarget].tilingTreeNodeCasesOrDie() {
                         case .tilingContainer(let topLevelSiblingTargetContainer):
-                            return deepMoveIn(window: currentWindow, into: topLevelSiblingTargetContainer, moveDirection: direction)
+                            // BSP mode: use simple swap instead of deep move
+                            if parent.layout == .bsp {
+                                return swapWithContainer(window: currentWindow, container: topLevelSiblingTargetContainer)
+                            } else {
+                                return deepMoveIn(window: currentWindow, into: topLevelSiblingTargetContainer, moveDirection: direction)
+                            }
                         case .window: // "swap windows"
                             let prevBinding = currentWindow.unbindFromParent()
                             currentWindow.bind(to: parent, adaptiveWeight: prevBinding.adaptiveWeight, index: indexOfSiblingTarget)
@@ -67,7 +72,7 @@ struct MoveCommand: Command {
 
                 return MoveNodeToMonitorCommand(args: moveNodeToMonitorArgs).run(env, io)
             } else {
-                return hitAllMonitorsOuterFrameBoundaries(window, workspace, args, direction)
+                return hitAllMonitorsOuterFrameBoundaries(window, workspace, io, args, direction)
             }
     }
 }
@@ -75,6 +80,7 @@ struct MoveCommand: Command {
 @MainActor private func hitAllMonitorsOuterFrameBoundaries(
     _ window: Window,
     _ workspace: Workspace,
+    _ io: CmdIo,
     _ args: MoveCmdArgs,
     _ direction: CardinalDirection,
 ) -> Bool {
@@ -106,19 +112,63 @@ private let moveOutMacosUnconventionalWindow = "moving macOS fullscreen, minimiz
     }) as? TilingContainer
     guard let innerMostChild else { return false }
     guard let parent = innerMostChild.parent else { return false }
+
+    let result: Bool
     switch parent.cases {
         case .tilingContainer(let parent):
             check(parent.orientation == direction.orientation)
             guard let ownIndex = innerMostChild.ownIndex else { return false }
-            window.bind(to: parent, adaptiveWeight: WEIGHT_AUTO, index: ownIndex + direction.insertionOffset)
-            return true
+            
+            // BSP mode: swap the window's container with the adjacent sibling
+            if parent.layout == .bsp {
+                let targetIndex = ownIndex + direction.focusOffset
+                if parent.children.indices.contains(targetIndex) {
+                    // Swap innerMostChild (container holding window) with adjacent sibling
+                    // Each element keeps its own weight, only positions are swapped
+                    let targetSibling = parent.children[targetIndex]
+                    let innerWeight = innerMostChild.getWeight(parent.orientation)
+                    let targetWeight = targetSibling.getWeight(parent.orientation)
+                    
+                    // Unbind higher index first to preserve indices
+                    if ownIndex < targetIndex {
+                        targetSibling.unbindFromParent()
+                        innerMostChild.unbindFromParent()
+                        // targetSibling goes to ownIndex (left), keeps its weight
+                        targetSibling.bind(to: parent, adaptiveWeight: targetWeight, index: ownIndex)
+                        // innerMostChild goes to targetIndex (right), keeps its weight
+                        innerMostChild.bind(to: parent, adaptiveWeight: innerWeight, index: targetIndex)
+                    } else {
+                        innerMostChild.unbindFromParent()
+                        targetSibling.unbindFromParent()
+                        // innerMostChild goes to targetIndex, keeps its weight
+                        innerMostChild.bind(to: parent, adaptiveWeight: innerWeight, index: targetIndex)
+                        // targetSibling goes to ownIndex, keeps its weight
+                        targetSibling.bind(to: parent, adaptiveWeight: targetWeight, index: ownIndex)
+                    }
+                    result = true
+                } else {
+                    // At boundary, use original behavior
+                    window.bind(to: parent, adaptiveWeight: WEIGHT_AUTO, index: ownIndex + direction.insertionOffset)
+                    result = true
+                }
+            } else {
+                window.bind(to: parent, adaptiveWeight: WEIGHT_AUTO, index: ownIndex + direction.insertionOffset)
+                result = true
+            }
         case .workspace(let parent):
-            return hitWorkspaceBoundaries(window, parent, io, args, direction, env)
+            result = hitWorkspaceBoundaries(window, parent, io, args, direction, env)
         case .macosMinimizedWindowsContainer, .macosFullscreenWindowsContainer, .macosHiddenAppsWindowsContainer:
             return io.err(moveOutMacosUnconventionalWindow)
         case .macosPopupWindowsContainer:
             return false // Impossible
     }
+
+    // Apply BSP optimization after successful move
+    if result {
+        optimizeBSPAfterWindowMove(window: window)
+    }
+
+    return result
 }
 
 @MainActor private func createImplicitContainerAndMoveWindow(
@@ -127,12 +177,20 @@ private let moveOutMacosUnconventionalWindow = "moving macOS fullscreen, minimiz
     _ direction: CardinalDirection,
 ) {
     let prevRoot = workspace.rootTilingContainer
+    let targetLayout = prevRoot.layout  // Preserve original layout instead of forcing tiles
+    
     prevRoot.unbindFromParent()
-    // Force tiles layout
-    _ = TilingContainer(parent: workspace, adaptiveWeight: WEIGHT_AUTO, direction.orientation, .tiles, index: 0)
+    
+    // Create new container with preserved layout mode
+    _ = TilingContainer(parent: workspace, adaptiveWeight: WEIGHT_AUTO, direction.orientation, targetLayout, index: 0)
     check(prevRoot != workspace.rootTilingContainer)
     prevRoot.bind(to: workspace.rootTilingContainer, adaptiveWeight: WEIGHT_AUTO, index: 0)
     window.bind(to: workspace.rootTilingContainer, adaptiveWeight: WEIGHT_AUTO, index: direction.insertionOffset)
+    
+    // Apply BSP optimization if we're dealing with BSP layout
+    if targetLayout == .bsp {
+        workspace.rootTilingContainer.optimizeBSPAfterWindowMove()
+    }
 }
 
 @MainActor private func deepMoveIn(window: Window, into container: TilingContainer, moveDirection: CardinalDirection) -> Bool {
@@ -148,6 +206,43 @@ private let moveOutMacosUnconventionalWindow = "moving macOS fullscreen, minimiz
                 index: deepTarget.ownIndex.orDie() + 1,
             )
     }
+
+    // Apply BSP optimization after successful move
+    optimizeBSPAfterWindowMove(window: window)
+
+    return true
+}
+
+/// BSP mode: swap window position with an adjacent container (simple and predictable)
+@MainActor private func swapWithContainer(window: Window, container: TilingContainer) -> Bool {
+    guard let parent = window.parent as? TilingContainer else { return false }
+    guard let windowIndex = window.ownIndex else { return false }
+    guard let containerIndex = container.ownIndex else { return false }
+    
+    // Ensure both are siblings in the same parent
+    guard container.parent === parent else { return false }
+    
+    // Get weights before unbinding - each element keeps its own weight
+    let windowWeight = window.getWeight(parent.orientation)
+    let containerWeight = container.getWeight(parent.orientation)
+    
+    // Unbind higher index first to preserve lower index positions
+    if windowIndex < containerIndex {
+        container.unbindFromParent()
+        window.unbindFromParent()
+        // container goes to windowIndex, keeps its weight
+        container.bind(to: parent, adaptiveWeight: containerWeight, index: windowIndex)
+        // window goes to containerIndex, keeps its weight
+        window.bind(to: parent, adaptiveWeight: windowWeight, index: containerIndex)
+    } else {
+        window.unbindFromParent()
+        container.unbindFromParent()
+        // window goes to containerIndex, keeps its weight
+        window.bind(to: parent, adaptiveWeight: windowWeight, index: containerIndex)
+        // container goes to windowIndex, keeps its weight
+        container.bind(to: parent, adaptiveWeight: containerWeight, index: windowIndex)
+    }
+    
     return true
 }
 
@@ -165,5 +260,29 @@ extension TilingTreeNodeCases {
                         .findDeepMoveInTargetRecursive(orientation)
                 }
         }
+    }
+}
+
+/// Optimizes BSP layout after a window move operation
+@MainActor private func optimizeBSPAfterWindowMove(window: Window) {
+    // Find the workspace containing the window
+    guard let workspace = window.nodeWorkspace else { return }
+
+    // Get the root container
+    let rootContainer = workspace.rootTilingContainer
+
+    // Only optimize if we're dealing with BSP layout
+    guard rootContainer.layout == .bsp else { return }
+
+    // Handle root container change and optimize the entire BSP tree
+    rootContainer.handleRootContainerChange()
+
+    // Also optimize any parent containers that might have been affected
+    var currentParent = window.parent as? TilingContainer
+    while let parent = currentParent {
+        if parent.layout == .bsp {
+            parent.handleRootContainerChange()
+        }
+        currentParent = parent.parent as? TilingContainer
     }
 }

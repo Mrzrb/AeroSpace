@@ -9,10 +9,10 @@ final class MacApp: AbstractApp {
     /*conforms*/ let rawAppBundleId: String?
     let appId: KnownBundleId?
     let nsApp: NSRunningApplication
+    let isZoom: Bool
     private let axApp: ThreadGuardedValue<AXUIElement>
     private let appAxSubscriptions: ThreadGuardedValue<[AxSubscription]> // keep subscriptions in memory
     private let windows: ThreadGuardedValue<[UInt32: AxWindow]> = .init([:])
-    private var windowsCount = 0
     var lastNativeFocusedWindowId: UInt32? = nil
     private var thread: Thread?
     private var setFrameJobs: [UInt32: RunLoopJob] = [:]
@@ -25,14 +25,15 @@ final class MacApp: AbstractApp {
     // todo think if it's possible to integrate this global mutable state to https://github.com/nikitabobko/AeroSpace/issues/1215
     //      and make deinitialization automatic in deinit
     @MainActor static var allAppsMap: [pid_t: MacApp] = [:]
-    @MainActor private static var wipPids: [pid_t: AwaitableOneTimeBroadcastLatch] = [:]
+    @MainActor private static var wipPids: Set<pid_t> = []
 
     private init(_ nsApp: NSRunningApplication, _ axApp: AXUIElement, _ axSubscriptions: [AxSubscription], _ thread: Thread) {
         self.nsApp = nsApp
         self.axApp = .init(axApp)
+        self.isZoom = nsApp.bundleIdentifier == "us.zoom.xos"
         self.pid = nsApp.processIdentifier
         self.rawAppBundleId = nsApp.bundleIdentifier
-        self.appId = nsApp.bundleIdentifier.flatMap { KnownBundleId.init(rawValue: $0) }
+        self.appId = nsApp.bundleIdentifier.flatMap { KnownBundleId(rawValue: $0) }
         assert(!axSubscriptions.isEmpty)
         self.appAxSubscriptions = .init(axSubscriptions)
         self.thread = thread
@@ -51,12 +52,10 @@ final class MacApp: AbstractApp {
         while true {
             if let existing = allAppsMap[pid] { return existing }
             try checkCancellation()
-            if let wip = wipPids[pid] {
-                try await wip.await()
+            if !wipPids.insert(pid).inserted {
+                try await Task.sleep(for: .milliseconds(100)) // busy waiting
                 continue
             }
-            let wip = AwaitableOneTimeBroadcastLatch()
-            wipPids[pid] = wip
 
             let thread = Thread {
                 $axTaskLocalAppThreadToken.withValue(AxAppThreadToken(pid: pid, idForDebug: nsApp.idForDebug)) {
@@ -70,8 +69,7 @@ final class MacApp: AbstractApp {
                     let app = isGood ? MacApp(nsApp, axApp, subscriptions, Thread.current) : nil
                     Task { @MainActor in
                         allAppsMap[pid] = app
-                        await wip.signalToAll()
-                        wipPids[pid] = nil
+                        wipPids.remove(pid)
                     }
                     if isGood {
                         CFRunLoopRun()
@@ -83,8 +81,8 @@ final class MacApp: AbstractApp {
         }
     }
 
+    @MainActor // todo swift is stupid
     func closeAndUnregisterAxWindow(_ windowId: UInt32) {
-        if serverArgs.isReadOnly { return }
         setFrameJobs.removeValue(forKey: windowId)?.cancel()
         _ = withWindowAsync(windowId) { [windows] window, job in
             guard let closeButton = window.get(Ax.closeButtonAttr) else { return }
@@ -94,6 +92,7 @@ final class MacApp: AbstractApp {
         }
     }
 
+    @MainActor // todo swift is stupid
     func getAxSize(_ windowId: UInt32) async throws -> CGSize? {
         try await withWindow(windowId) { window, job in
             window.get(Ax.sizeAttr)
@@ -101,6 +100,7 @@ final class MacApp: AbstractApp {
     }
 
     // todo merge together with detectNewWindows
+    @MainActor // todo swift is stupid
     func getFocusedWindow() async throws -> Window? {
         let windowId = try await thread?.runInLoop { [nsApp, axApp, windows] job in
             try axApp.threadGuarded.get(Ax.focusedWindowAttr)
@@ -112,49 +112,77 @@ final class MacApp: AbstractApp {
     }
 
     @MainActor func nativeFocus(_ windowId: UInt32) {
-        if serverArgs.isReadOnly { return }
         MacApp.focusJob?.cancel()
-        // Performance optimization. If possible avoid doing AX requests
-        // (important for apps which are slow at responding even such basic AX requests. E.g. Godot)
-        // Beware of the macOS bug: https://github.com/nikitabobko/AeroSpace/issues/101
-        if (!NSScreen.screensHaveSeparateSpaces || monitors.count == 1) &&
-            (lastNativeFocusedWindowId == windowId || windowsCount == 1)
-        {
+        MacApp.focusJob = withWindowAsync(windowId) { [nsApp] window, job in
+            // Raise firstly to make sure that by the time we activate the app, the window would be already on top
+            window.set(Ax.isMainAttr, true)
+            AXUIElementPerformAction(window, kAXRaiseAction as CFString)
             nsApp.activate(options: .activateIgnoringOtherApps)
-        } else {
-            MacApp.focusJob = withWindowAsync(windowId) { [nsApp] window, job in
-                // Raise firstly to make sure that by the time we activate the app, the window would be already on top
-                window.set(Ax.isMainAttr, true)
-                AXUIElementPerformAction(window, kAXRaiseAction as CFString)
-                nsApp.activate(options: .activateIgnoringOtherApps)
-            }
         }
     }
 
     func setAxFrame(_ windowId: UInt32, _ topLeft: CGPoint?, _ size: CGSize?) {
         setFrameJobs.removeValue(forKey: windowId)?.cancel()
         setFrameJobs[windowId] = withWindowAsync(windowId) { [axApp] window, job in
-            try disableAnimations(app: axApp.threadGuarded, job) {
-                try setFrame(window, topLeft, size, job)
+            disableAnimations(app: axApp.threadGuarded) {
+                setFrame(window, topLeft, size)
             }
         }
     }
 
+    @MainActor // todo swift is stupid
     func setAxFrameBlocking(_ windowId: UInt32, _ topLeft: CGPoint?, _ size: CGSize?) async throws {
         setFrameJobs.removeValue(forKey: windowId)?.cancel()
+        setFrameJobs[windowId] = nil
         try await withWindow(windowId) { [axApp] window, job in
-            try disableAnimations(app: axApp.threadGuarded, job) {
-                try setFrame(window, topLeft, size, job)
+            disableAnimations(app: axApp.threadGuarded) {
+                setFrame(window, topLeft, size)
             }
         }
     }
 
+    func setAxSize(_ windowId: UInt32, _ size: CGSize) {
+        setFrameJobs.removeValue(forKey: windowId)?.cancel()
+        setFrameJobs[windowId] = withWindowAsync(windowId) { [axApp] window, job in
+            disableAnimations(app: axApp.threadGuarded) {
+                _ = window.set(Ax.sizeAttr, size)
+            }
+        }
+    }
+
+    func setAxTopLeftCorner(_ windowId: UInt32, _ point: CGPoint) {
+        setFrameJobs.removeValue(forKey: windowId)?.cancel()
+        setFrameJobs[windowId] = withWindowAsync(windowId) { [axApp] window, job in
+            disableAnimations(app: axApp.threadGuarded) {
+                _ = window.set(Ax.topLeftCornerAttr, point)
+            }
+        }
+    }
+
+    func setAxAlpha(_ windowId: UInt32, _ alpha: Double) {
+        setFrameJobs.removeValue(forKey: windowId)?.cancel()
+        setFrameJobs[windowId] = withWindowAsync(windowId) { [axApp] window, job in
+            disableAnimations(app: axApp.threadGuarded) {
+                _ = window.set(Ax.alphaAttr, alpha)
+            }
+        }
+    }
+
+    @MainActor // todo swift is stupid
     func getAxWindowsCount() async throws -> Int? {
         try await thread?.runInLoop { [axApp] job in
             axApp.threadGuarded.get(Ax.windowsAttr)?.count
         }
     }
 
+    @MainActor // todo swift is stupid
+    func getAxTopLeftCorner(_ windowId: UInt32) async throws -> CGPoint? {
+        try await withWindow(windowId) { window, job in
+            window.get(Ax.topLeftCornerAttr)
+        }
+    }
+
+    @MainActor // todo swift is stupid
     func getAxRect(_ windowId: UInt32) async throws -> Rect? {
         try await withWindow(windowId) { window, job in
             guard let topLeftCorner = window.get(Ax.topLeftCornerAttr) else { return nil }
@@ -163,18 +191,21 @@ final class MacApp: AbstractApp {
         }
     }
 
+    @MainActor
     func isWindowHeuristic(_ windowId: UInt32, _ windowLevel: MacOsWindowLevel?) async throws -> Bool {
-        return try await withWindow(windowId) { [nsApp, axApp, appId] window, job in
+        try await withWindow(windowId) { [nsApp, axApp, appId] window, job in
             window.isWindowHeuristic(axApp: axApp.threadGuarded, appId, nsApp.activationPolicy, windowLevel)
         } == true
     }
 
+    @MainActor
     func getAxUiElementWindowType(_ windowId: UInt32, _ windowLevel: MacOsWindowLevel?) async throws -> AxUiElementWindowType {
-        return try await withWindow(windowId) { [nsApp, axApp, appId] window, job in
+        try await withWindow(windowId) { [nsApp, axApp, appId] window, job in
             window.getWindowType(axApp: axApp.threadGuarded, appId, nsApp.activationPolicy, windowLevel)
         } ?? .window
     }
 
+    @MainActor
     func isDialogHeuristic(_ windowId: UInt32, _ windowLevel: MacOsWindowLevel?) async throws -> Bool {
         try await withWindow(windowId) { [appId] window, job in
             window.isDialogHeuristic(appId, windowLevel)
@@ -195,30 +226,35 @@ final class MacApp: AbstractApp {
         }
     }
 
+    @MainActor // todo swift is stupid
     func dumpWindowAxInfo(windowId: UInt32) async throws -> [String: Json] {
         try await withWindow(windowId) { window, job in
             dumpAxRecursive(window, .window)
         } ?? [:]
     }
 
+    @MainActor // todo swift is stupid
     func dumpAppAxInfo() async throws -> [String: Json] {
         try await thread?.runInLoop { [axApp] job in
             dumpAxRecursive(axApp.threadGuarded, .app)
         } ?? [:]
     }
 
+    @MainActor // todo swift is stupid
     func getAxTitle(_ windowId: UInt32) async throws -> String? {
         try await withWindow(windowId) { window, job in
             window.get(Ax.titleAttr)
         }
     }
 
+    @MainActor // todo swift is stupid
     func isMacosNativeFullscreen(_ windowId: UInt32) async throws -> Bool? {
         try await withWindow(windowId) { window, job in
             window.get(Ax.isFullscreenAttr)
         }
     }
 
+    @MainActor // todo swift is stupid
     func isMacosNativeMinimized(_ windowId: UInt32) async throws -> Bool? {
         try await withWindow(windowId) { window, job in
             window.get(Ax.minimizedAttr)
@@ -230,13 +266,13 @@ final class MacApp: AbstractApp {
         for (_, app) in MacApp.allAppsMap { // gc dead apps
             try checkCancellation()
             if app.nsApp.isTerminated {
-                await app.destroy()
+                app.destroy()
             }
         }
         return try await withThrowingTaskGroup(of: (pid_t, [UInt32]).self, returning: [MacApp: [UInt32]].self) { group in
             func refreshTheApp(_ nsApp: NSRunningApplication) {
                 group.addTask { @Sendable @MainActor in
-                    guard let app = try await MacApp.getOrRegister(nsApp) else { return (nsApp.processIdentifier, []) }
+                    guard let app = try await getOrRegister(nsApp) else { return (nsApp.processIdentifier, []) }
                     return (nsApp.processIdentifier, try await app.refreshAndGetAliveWindowIds(frontmostAppBundleId: frontmostAppBundleId))
                 }
             }
@@ -258,7 +294,7 @@ final class MacApp: AbstractApp {
             }
             var result: [MacApp: [UInt32]] = [:]
             for try await (pid, windowIds) in group {
-                if let app = MacApp.allAppsMap[pid] {
+                if let app = allAppsMap[pid] {
                     result[app] = windowIds
                 }
             }
@@ -266,19 +302,19 @@ final class MacApp: AbstractApp {
         }
     }
 
+    @MainActor
     private func refreshAndGetAliveWindowIds(frontmostAppBundleId: String?) async throws -> [UInt32] {
         if nsApp.isTerminated {
-            await destroy()
+            destroy()
             return []
         }
         guard let thread else { return [] }
-        let (alive, dead) = try await thread.runInLoop { [nsApp, windows, axApp] (job) -> ([UInt32], [UInt32]) in
-            var alive: [UInt32: AxWindow] = windows.threadGuarded
-            var dead = [UInt32: AxWindow]()
+        return try await thread.runInLoop { [nsApp, windows, axApp] (job) -> [UInt32] in
+            var result: [UInt32: AxWindow] = windows.threadGuarded
             // Second line of defence against lock screen. See the first line of defence: closedWindowsCache
             // Second and third lines of defence are technically needed only to avoid potential flickering
             if frontmostAppBundleId != lockScreenAppBundleId {
-                (alive, dead) = try alive.partition {
+                result = try result.filter {
                     try job.checkCancellation()
                     return $0.value.ax.containingWindowId() != nil
                 }
@@ -286,21 +322,17 @@ final class MacApp: AbstractApp {
 
             for (id, window) in axApp.threadGuarded.get(Ax.windowsAttr) ?? [] {
                 try job.checkCancellation()
-                try alive.getOrRegisterAxWindow(windowId: id, window, nsApp, job)
+                try result.getOrRegisterAxWindow(windowId: id, window, nsApp, job)
             }
 
-            windows.threadGuarded = alive
-            return (Array(alive.keys), Array(dead.keys))
+            windows.threadGuarded = result
+            return Array(result.keys)
         }
-        windowsCount = alive.count
-        for windowId in dead {
-            setFrameJobs.removeValue(forKey: windowId)?.cancel()
-        }
-        return alive
     }
 
-    private func destroy() async {
-        _ = await Task { @MainActor [pid] in _ = MacApp.allAppsMap.removeValue(forKey: pid) }.result
+    @MainActor
+    private func destroy() {
+        MacApp.allAppsMap.removeValue(forKey: pid)
         for (_, job) in setFrameJobs {
             job.cancel()
         }
@@ -314,6 +346,7 @@ final class MacApp: AbstractApp {
         thread = nil // Disallow all future job submissions
     }
 
+    @MainActor // todo swift is stupid
     private func withWindow<T>(_ windowId: UInt32, _ body: @Sendable @escaping (AXUIElement, RunLoopJob) throws -> T?) async throws -> T? {
         try await thread?.runInLoop { [windows] job in
             guard let window = windows.threadGuarded[windowId] else { return nil }
@@ -321,18 +354,17 @@ final class MacApp: AbstractApp {
         }
     }
 
-    private func withWindowAsync(_ windowId: UInt32, _ body: @Sendable @escaping (AXUIElement, RunLoopJob) throws -> ()) -> RunLoopJob {
+    private func withWindowAsync(_ windowId: UInt32, _ body: @Sendable @escaping (AXUIElement, RunLoopJob) -> ()) -> RunLoopJob {
         thread?.runInLoopAsync { [windows] job in
             guard let window = windows.threadGuarded[windowId] else { return }
-            try? body(window.ax, job)
+            body(window.ax, job)
         } ?? .cancelled
     }
 }
 
-private final class AxWindow {
+private class AxWindow {
     let windowId: UInt32
     let ax: AXUIElement
-    // periphery:ignore
     private let axSubscriptions: [AxSubscription] // keep subscriptions in memory
 
     private init(windowId: UInt32, _ ax: AXUIElement, _ axSubscriptions: [AxSubscription]) {
@@ -371,20 +403,18 @@ extension [UInt32: AxWindow] {
     }
 }
 
-private func setFrame(_ window: AXUIElement, _ topLeft: CGPoint?, _ size: CGSize?, _ job: RunLoopJob) throws {
+private func setFrame(_ window: AXUIElement, _ topLeft: CGPoint?, _ size: CGSize?) {
     // Set size and then the position. The order is important https://github.com/nikitabobko/AeroSpace/issues/143
     //                                                        https://github.com/nikitabobko/AeroSpace/issues/335
     if let size { window.set(Ax.sizeAttr, size) }
-    try job.checkCancellation()
     if let topLeft { window.set(Ax.topLeftCornerAttr, topLeft) } else { return }
-    try job.checkCancellation()
     if let size { window.set(Ax.sizeAttr, size) }
 }
 
 // Some undocumented magic
 // References: https://github.com/koekeishiya/yabai/commit/3fe4c77b001e1a4f613c26f01ea68c0f09327f3a
 //             https://github.com/rxhanson/Rectangle/pull/285
-private func disableAnimations<T>(app: AXUIElement, _ job: RunLoopJob, _ body: () throws -> T) throws -> T {
+private func disableAnimations<T>(app: AXUIElement, _ body: () -> T) -> T {
     let wasEnabled = app.get(Ax.enhancedUserInterfaceAttr) == true
     if wasEnabled {
         app.set(Ax.enhancedUserInterfaceAttr, false)
@@ -394,6 +424,7 @@ private func disableAnimations<T>(app: AXUIElement, _ job: RunLoopJob, _ body: (
             app.set(Ax.enhancedUserInterfaceAttr, true)
         }
     }
-    try job.checkCancellation()
-    return try body()
+    return body()
 }
+
+typealias Continuation<T> = CheckedContinuation<T, Never>

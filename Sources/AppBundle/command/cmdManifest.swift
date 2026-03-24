@@ -60,6 +60,8 @@ extension CmdArgs {
                 command = MoveNodeToWorkspaceCommand(args: self as! MoveNodeToWorkspaceCmdArgs)
             case .moveWorkspaceToMonitor:
                 command = MoveWorkspaceToMonitorCommand(args: self as! MoveWorkspaceToMonitorCmdArgs)
+            case .optimizeBSP:
+                command = OptimizeBSPCommand(args: self as! OptimizeBSPCmdArgs)
             case .reloadConfig:
                 command = ReloadConfigCommand(args: self as! ReloadConfigCmdArgs)
             case .resize:

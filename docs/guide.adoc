@@ -229,7 +229,7 @@ WARNING: i3 has a different terminology.
 * Each container can contain arbitrary number of children nodes
 * Windows are the only possible leaf nodes. Windows contain zero children nodes
 * Every container has two properties:
-. <<layouts,Layout>> (Possible values: `tiles`, `accordion`)
+. <<layouts,Layout>> (Possible values: `tiles`, `accordion`, `bsp`)
 . Orientation (Possible values: `horizontal`, `vertical`)
 
 When we say "layout of the window", we refer to the layout of the window’s parent container.
@@ -256,7 +256,7 @@ The tree structure can be changed with three commands:
 [#layouts]
 === Layouts
 
-In total, AeroSpace provides 4 possible layouts:
+In total, AeroSpace provides 6 possible layouts:
 
 - `h_tiles` horizontal tiles (in i3, it’s called "horizontal split")
 - `v_tiles` vertical tiles (in i3, it’s called "vertical split")
@@ -282,6 +282,14 @@ You can navigate the windows in an `h_accordion` by using the `focus (left|right
 While in a `v_accordion`, you can navigate the windows using the `focus (up|down)` command.
 
 Accordion padding is configurable via `accordion-padding` option.
+
+BSP (Binary Space Partitioning) is a layout that recursively splits space into a binary tree structure, similar to i3wm. When you add a new window, BSP intelligently chooses where to split existing space based on container dimensions and configuration.
+
+* *Horizontal BSP* (`h_bsp`) prefers horizontal splits when adding new windows
+* *Vertical BSP* (`v_bsp`) prefers vertical splits when adding new windows  
+* *Auto BSP* (`bsp`) intelligently chooses split direction based on container aspect ratio
+
+BSP layout creates a more flexible window arrangement compared to traditional tiles, allowing for complex nested layouts while maintaining intuitive navigation with the xref:commands.adoc#focus[focus] command.
 
 [#normalization]
 === Normalization

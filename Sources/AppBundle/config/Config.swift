@@ -23,9 +23,13 @@ var defaultConfigUrl: URL {
     }
 }
 @MainActor let defaultConfig: Config = {
-    let parsedConfig = parseConfig(Result { try String(contentsOf: defaultConfigUrl, encoding: .utf8) }.getOrDie())
+    guard let configContent = try? String(contentsOf: defaultConfigUrl, encoding: .utf8) else {
+        return Config()
+    }
+    let parsedConfig = parseConfig(configContent)
     if !parsedConfig.errors.isEmpty {
-        die("Can't parse default config: \(parsedConfig.errors)")
+        print("Warning: Can't parse default config: \(parsedConfig.errors)")
+        return Config()
     }
     return parsedConfig.config
 }()
@@ -54,14 +58,27 @@ struct Config: ConvenienceCopyable {
     var onFocusChanged: [any Command] = []
     // var onFocusedWorkspaceChanged: [any Command] = []
     var onFocusedMonitorChanged: [any Command] = []
+    var onModeChanged: [any Command] = []
 
     var gaps: Gaps = .zero
     var workspaceToMonitorForceAssignment: [String: [MonitorDescription]] = [:]
     var modes: [String: Mode] = [:]
     var onWindowDetected: [WindowDetectedCallback] = []
-    var onModeChanged: [any Command] = []
+
+    var bsp: BSPConfig = BSPConfig()
+    var animation: AnimationConfig = AnimationConfig()
+    var visualEffects: VisualEffectsConfig = VisualEffectsConfig()
 }
 
 enum DefaultContainerOrientation: String {
     case horizontal, vertical, auto
+}
+
+struct BSPConfig: ConvenienceCopyable {
+    var splitRatio: Double = 0.5
+    var autoSplitThreshold: Double = 1.2
+    var preferredSplitDirection: Orientation? = nil
+    var enableIntelligentRebalancing: Bool = true
+    var enableAdaptiveWeighting: Bool = true
+    var enableAutoOptimization: Bool = true
 }

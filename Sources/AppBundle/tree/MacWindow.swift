@@ -52,14 +52,22 @@ final class MacWindow: Window {
     //     return "Window(\(description))"
     // }
 
-    func isWindowHeuristic(_ windowLevel: MacOsWindowLevel?) async throws -> Bool { // todo cache
+    @MainActor // todo swift is stupid
+    func isWindowHeuristic(_ windowLevel: MacOsWindowLevel? = nil) async throws -> Bool { // todo cache
         try await macApp.isWindowHeuristic(windowId, windowLevel)
     }
 
-    func isDialogHeuristic(_ windowLevel: MacOsWindowLevel?) async throws -> Bool { // todo cache
+    @MainActor // todo swift is stupid
+    func isDialogHeuristic(_ windowLevel: MacOsWindowLevel? = nil) async throws -> Bool { // todo cache
         try await macApp.isDialogHeuristic(windowId, windowLevel)
     }
 
+    @MainActor
+    func getAxUiElementWindowType(_ windowLevel: MacOsWindowLevel? = nil) async throws -> AxUiElementWindowType {
+        try await macApp.getAxUiElementWindowType(windowId, windowLevel)
+    }
+
+    @MainActor // todo swift is stupid
     func dumpAxInfo() async throws -> [String: Json] {
         try await macApp.dumpWindowAxInfo(windowId: windowId)
     }
@@ -120,17 +128,15 @@ final class MacWindow: Window {
     @MainActor
     func hideInCorner(_ corner: OptimalHideCorner) async throws {
         guard let nodeMonitor else { return }
-        // Don't accidentally override prevUnhiddenEmulationPosition in case of subsequent `hideInCorner` calls
+        // Don't accidentally override prevUnhiddenEmulationPosition in case of subsequent
+        // `hideEmulation` calls
         if !isHiddenInCorner {
             guard let windowRect = try await getAxRect() else { return }
-            // Check for isHiddenInCorner for the second time because of the suspension point above
-            if !isHiddenInCorner {
-                let topLeftCorner = windowRect.topLeftCorner
-                let monitorRect = windowRect.center.monitorApproximation.rect // Similar to layoutFloatingWindow. Non idempotent
-                let absolutePoint = topLeftCorner - monitorRect.topLeftCorner
-                prevUnhiddenProportionalPositionInsideWorkspaceRect =
-                    CGPoint(x: absolutePoint.x / monitorRect.width, y: absolutePoint.y / monitorRect.height)
-            }
+            let topLeftCorner = windowRect.topLeftCorner
+            let monitorRect = windowRect.center.monitorApproximation.rect // Similar to layoutFloatingWindow. Non idempotent
+            let absolutePoint = topLeftCorner - monitorRect.topLeftCorner
+            prevUnhiddenProportionalPositionInsideWorkspaceRect =
+                CGPoint(x: absolutePoint.x / monitorRect.width, y: absolutePoint.y / monitorRect.height)
         }
         let p: CGPoint
         switch corner {
@@ -138,15 +144,15 @@ final class MacWindow: Window {
                 guard let s = try await getAxSize() else { fallthrough }
                 // Zoom will jump off if you do one pixel offset https://github.com/nikitabobko/AeroSpace/issues/527
                 // todo this ad hoc won't be necessary once I implement optimization suggested by Zalim
-                let onePixelOffset = macApp.appId == .zoom ? .zero : CGPoint(x: 1, y: -1)
+                let onePixelOffset = macApp.isZoom ? .zero : CGPoint(x: 1, y: -1)
                 p = nodeMonitor.visibleRect.bottomLeftCorner + onePixelOffset + CGPoint(x: -s.width, y: 0)
             case .bottomRightCorner:
                 // Zoom will jump off if you do one pixel offset https://github.com/nikitabobko/AeroSpace/issues/527
                 // todo this ad hoc won't be necessary once I implement optimization suggested by Zalim
-                let onePixelOffset = macApp.appId == .zoom ? .zero : CGPoint(x: 1, y: 1)
+                let onePixelOffset = macApp.isZoom ? .zero : CGPoint(x: 1, y: 1)
                 p = nodeMonitor.visibleRect.bottomRightCorner - onePixelOffset
         }
-        setAxFrame(p, nil)
+        setAxTopLeftCornerImmediate(p)
     }
 
     @MainActor
@@ -162,14 +168,11 @@ final class MacWindow: Window {
                 let workspaceRect = nodeWorkspace.workspaceMonitor.rect
                 var newX = workspaceRect.topLeftX + workspaceRect.width * prevUnhiddenProportionalPositionInsideWorkspaceRect.x
                 var newY = workspaceRect.topLeftY + workspaceRect.height * prevUnhiddenProportionalPositionInsideWorkspaceRect.y
-                // todo we probably should replace lastFloatingSize with proper floating window sizing
-                // https://github.com/nikitabobko/AeroSpace/issues/1519
                 let windowWidth = lastFloatingSize?.width ?? 0
                 let windowHeight = lastFloatingSize?.height ?? 0
                 newX = newX.coerce(in: workspaceRect.minX ... max(workspaceRect.minX, workspaceRect.maxX - windowWidth))
                 newY = newY.coerce(in: workspaceRect.minY ... max(workspaceRect.minY, workspaceRect.maxY - windowHeight))
-
-                setAxFrame(CGPoint(x: newX, y: newY), nil)
+                setAxFrameImmediate(CGPoint(x: newX, y: newY), nil)
             case .macosNativeFullscreenWindow, .macosNativeHiddenAppWindow, .macosNativeMinimizedWindow,
                  .macosPopupWindow, .tiling, .rootTilingContainer, .shimContainerRelation: break
         }
@@ -181,25 +184,148 @@ final class MacWindow: Window {
         prevUnhiddenProportionalPositionInsideWorkspaceRect != nil
     }
 
+    @MainActor // todo swift is stupid
     override func getAxSize() async throws -> CGSize? {
         try await macApp.getAxSize(windowId)
     }
 
+    @MainActor
+    override func setAxTopLeftCorner(_ point: CGPoint) {
+        // Check if we should use animation for position changes
+        if config.animation.enabled && config.animation.moveAnimationEnabled {
+            Task {
+                do {
+                    try await WindowAnimationEngine.shared.animateWindowPosition(self, to: point)
+                } catch {
+                    // Fallback to immediate positioning if animation fails
+                    await MainActor.run {
+                        macApp.setAxTopLeftCorner(windowId, point)
+                    }
+                }
+            }
+        } else {
+            macApp.setAxTopLeftCorner(windowId, point)
+        }
+    }
+
+    @MainActor
     override func setAxFrame(_ topLeft: CGPoint?, _ size: CGSize?) {
+        // Check if we should use animation for frame changes
+        if config.animation.enabled && (config.animation.moveAnimationEnabled || config.animation.resizeAnimationEnabled) {
+            Task {
+                do {
+                    // Get current rect to determine what changed
+                    guard let currentRect = try await getAxRect() else {
+                        // Fallback to immediate if we can't get current rect
+                        await MainActor.run {
+                            macApp.setAxFrame(windowId, topLeft, size)
+                        }
+                        return
+                    }
+
+                    let targetTopLeft = topLeft ?? CGPoint(x: currentRect.topLeftX, y: currentRect.topLeftY)
+                    let targetSize = size ?? CGSize(width: currentRect.width, height: currentRect.height)
+                    let targetRect = Rect(topLeftX: targetTopLeft.x, topLeftY: targetTopLeft.y,
+                                          width: targetSize.width, height: targetSize.height)
+
+                    try await WindowAnimationEngine.shared.animateWindow(self, to: targetRect)
+                } catch {
+                    // Fallback to immediate positioning if animation fails
+                    await MainActor.run {
+                        macApp.setAxFrame(windowId, topLeft, size)
+                    }
+                }
+            }
+        } else {
+            macApp.setAxFrame(windowId, topLeft, size)
+        }
+    }
+
+    @MainActor // todo swift is stupid
+    override func setAxFrameBlocking(_ topLeft: CGPoint?, _ size: CGSize?) async throws {
+        // For blocking calls, we need to handle animation differently
+        if config.animation.enabled && (config.animation.moveAnimationEnabled || config.animation.resizeAnimationEnabled) {
+            do {
+                // Get current rect to determine what changed
+                guard let currentRect = try await getAxRect() else {
+                    // Fallback to immediate if we can't get current rect
+                    try await macApp.setAxFrameBlocking(windowId, topLeft, size)
+                    return
+                }
+
+                let targetTopLeft = topLeft ?? CGPoint(x: currentRect.topLeftX, y: currentRect.topLeftY)
+                let targetSize = size ?? CGSize(width: currentRect.width, height: currentRect.height)
+                let targetRect = Rect(topLeftX: targetTopLeft.x, topLeftY: targetTopLeft.y,
+                                      width: targetSize.width, height: targetSize.height)
+
+                try await WindowAnimationEngine.shared.animateWindow(self, to: targetRect)
+            } catch {
+                // Fallback to immediate positioning if animation fails
+                try await macApp.setAxFrameBlocking(windowId, topLeft, size)
+            }
+        } else {
+            try await macApp.setAxFrameBlocking(windowId, topLeft, size)
+        }
+    }
+
+    @MainActor
+    override func setSizeAsync(_ size: CGSize) {
+        // Check if we should use animation for size changes
+        if config.animation.enabled && config.animation.resizeAnimationEnabled {
+            Task {
+                do {
+                    try await WindowAnimationEngine.shared.animateWindowSize(self, to: size)
+                } catch {
+                    // Fallback to immediate sizing if animation fails
+                    await MainActor.run {
+                        macApp.setAxSize(windowId, size)
+                    }
+                }
+            }
+        } else {
+            macApp.setAxSize(windowId, size)
+        }
+    }
+
+    // MARK: - Animation Bypass Methods
+
+    /// Set window position immediately without animation (for cases where immediate updates are required)
+    @MainActor
+    override func setAxTopLeftCornerImmediate(_ point: CGPoint) {
+        macApp.setAxTopLeftCorner(windowId, point)
+    }
+
+    /// Set window frame immediately without animation (for cases where immediate updates are required)
+    @MainActor
+    override func setAxFrameImmediate(_ topLeft: CGPoint?, _ size: CGSize?) {
         macApp.setAxFrame(windowId, topLeft, size)
     }
 
-    func setAxFrameBlocking(_ topLeft: CGPoint?, _ size: CGSize?) async throws {
-        try await macApp.setAxFrameBlocking(windowId, topLeft, size)
+    /// Set window size immediately without animation (for cases where immediate updates are required)
+    @MainActor
+    override func setSizeAsyncImmediate(_ size: CGSize) {
+        macApp.setAxSize(windowId, size)
     }
 
+    /// Set window alpha/opacity immediately without animation (for workspace transition effects)
+    @MainActor
+    override func setAxAlphaImmediate(_ alpha: Double) {
+        macApp.setAxAlpha(windowId, alpha)
+    }
+
+    @MainActor
+    override func getAxTopLeftCorner() async throws -> CGPoint? {
+        try await macApp.getAxTopLeftCorner(windowId)
+    }
+
+    @MainActor
     override func getAxRect() async throws -> Rect? {
         try await macApp.getAxRect(windowId)
     }
 }
 
 extension Window {
-    @MainActor
+    @MainActor // todo swift is stupid
     func relayoutWindow(on workspace: Workspace, forceTile: Bool = false) async throws {
         let data = forceTile
             ? unbindAndGetBindingDataForNewTilingWindow(workspace, window: self)
@@ -209,10 +335,9 @@ extension Window {
 }
 
 // The function is private because it's unsafe. It leaves the window in unbound state
-@MainActor
+@MainActor // todo swift is stupid
 private func unbindAndGetBindingDataForNewWindow(_ windowId: UInt32, _ macApp: MacApp, _ workspace: Workspace, window: Window?) async throws -> BindingData {
-    let windowLevel = getWindowLevel(for: windowId)
-    return switch try await macApp.getAxUiElementWindowType(windowId, windowLevel) {
+    switch try await macApp.getAxUiElementWindowType(windowId, getWindowLevel(for: windowId)) {
         case .popup: BindingData(parent: macosPopupWindowsContainer, adaptiveWeight: WEIGHT_AUTO, index: INDEX_BIND_LAST)
         case .dialog: BindingData(parent: workspace, adaptiveWeight: WEIGHT_AUTO, index: INDEX_BIND_LAST)
         case .window: unbindAndGetBindingDataForNewTilingWindow(workspace, window: window)
@@ -223,6 +348,13 @@ private func unbindAndGetBindingDataForNewWindow(_ windowId: UInt32, _ macApp: M
 @MainActor
 private func unbindAndGetBindingDataForNewTilingWindow(_ workspace: Workspace, window: Window?) -> BindingData {
     window?.unbindFromParent() // It's important to unbind to get correct data from below
+
+    // Check if we should use BSP insertion logic
+    if workspace.rootTilingContainer.layout == .bsp {
+        return TilingContainer.getBSPInsertionPoint(in: workspace, for: window)
+    }
+
+    // Default insertion logic for tiles and accordion layouts
     let mruWindow = workspace.mostRecentWindowRecursive
     if let mruWindow, let tilingParent = mruWindow.parent as? TilingContainer {
         return BindingData(
@@ -253,12 +385,6 @@ func tryOnWindowDetected(_ window: Window) async throws {
 
 @MainActor
 private func onWindowDetected(_ window: Window) async throws {
-    broadcastEvent(.windowDetected(
-        windowId: window.windowId,
-        workspace: window.nodeWorkspace?.name,
-        appBundleId: window.app.rawAppBundleId,
-        appName: window.app.name,
-    ))
     for callback in config.onWindowDetected where try await callback.matches(window) {
         _ = try await callback.run.runCmdSeq(.defaultEnv.copy(\.windowId, window.windowId), .emptyStdin)
         if !callback.checkFurtherCallbacks {

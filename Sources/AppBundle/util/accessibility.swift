@@ -287,6 +287,11 @@ enum Ax {
         key: kAXMinimizeButtonAttribute,
         getter: castToAxUiElementMock,
     )
+    static let alphaAttr = WritableAttrImpl<Double>(
+        key: "AXAlpha",
+        getter: { $0 as? Double },
+        setter: { $0 as CFTypeRef }
+    )
     //static let growAreaAttr = ReadableAttrImpl<AXUIElement>(
     //    key: kAXGrowAreaAttribute,
     //    getter: { ($0 as! AXUIElement) }

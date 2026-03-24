@@ -1,0 +1,156 @@
+# Performance-Optimized Configuration
+# This configuration prioritizes performance and battery life over visual effects
+# Ideal for older hardware, battery-powered devices, or performance-critical workflows
+
+start-at-login = true
+enable-normalization-flatten-containers = true
+enable-normalization-opposite-orientation-for-nested-containers = true
+accordion-padding = 15
+default-root-container-layout = 'tiles'
+default-root-container-orientation = 'auto'
+on-focused-monitor-changed = ['move-mouse monitor-lazy-center']
+automatically-unhide-macos-hidden-apps = false
+
+[key-mapping]
+    preset = 'qwerty'
+
+[gaps]
+    inner.horizontal = 4
+    inner.vertical = 4
+    outer.left = 4
+    outer.bottom = 4
+    outer.top = 4
+    outer.right = 4
+
+[bsp]
+    split-ratio = 0.5
+    auto-split-threshold = 1.2
+    preferred-split-direction = 'auto'
+
+# Minimal animation configuration for best performance
+[animations]
+    enabled = true
+    default-duration = 0.12  # Shorter duration for snappier feel
+    easing-function = 'linear'  # Fastest to compute
+    respect-system-preferences = true
+    
+    # Enable only essential animations
+    move-animation-enabled = true
+    resize-animation-enabled = false  # Disable for performance
+    layout-change-animation-enabled = false  # Disable for performance
+    workspace-transition-animation-enabled = true
+    
+    # Conservative performance settings
+    max-concurrent-animations = 3
+    adaptive-quality = true
+    min-frame-rate = 24.0  # Lower threshold for older hardware
+    
+    # GPU acceleration with conservative settings
+    gpu-acceleration-enabled = true
+    gpu-acceleration-mode = 'automatic'  # Let system decide
+    gpu-batch-size = 16  # Smaller batches for stability
+    gpu-fallback-threshold = 0.6  # Earlier fallback to CPU
+    
+    # Simple easing parameters
+    spring-damping = 1.0
+    spring-velocity = 0.0
+    bounce-intensity = 0.5
+    elastic-amplitude = 0.3
+    elastic-period = 0.2
+
+# Minimal visual effects for compatibility
+[visual-effects]
+    enabled = false  # Disabled for maximum performance
+    adaptive-quality = true
+    performance-threshold = 33.33  # ~30fps threshold
+    max-concurrent-effects = 3
+    effect-quality-level = 'low'
+    enable-gpu-acceleration = false  # Disabled to save power
+    
+    # If you want to enable minimal effects, uncomment below:
+    # [visual-effects.motion-blur]
+    #     enabled = false
+    # 
+    # [visual-effects.afterimage]
+    #     enabled = false
+    # 
+    # [visual-effects.particles]
+    #     enabled = false
+    #     count = 5
+    #     size-width = 2.0
+    #     size-height = 2.0
+    #     duration = 0.5
+    #     spread = 20.0
+    #     velocity = 50.0
+    #     available-types = ['spark']
+    #     default-type = 'spark'
+    # 
+    # [visual-effects.ripple]
+    #     enabled = false
+
+# Standard key bindings
+[mode.main.binding]
+    alt-slash = 'layout tiles horizontal vertical'
+    alt-comma = 'layout accordion horizontal vertical'
+    alt-period = 'layout bsp'
+    
+    alt-h = 'focus left'
+    alt-j = 'focus down'
+    alt-k = 'focus up'
+    alt-l = 'focus right'
+    
+    alt-shift-h = 'move left'
+    alt-shift-j = 'move down'
+    alt-shift-k = 'move up'
+    alt-shift-l = 'move right'
+    
+    alt-minus = 'resize smart -50'
+    alt-equal = 'resize smart +50'
+    
+    alt-1 = 'workspace 1'
+    alt-2 = 'workspace 2'
+    alt-3 = 'workspace 3'
+    alt-4 = 'workspace 4'
+    alt-5 = 'workspace 5'
+    alt-6 = 'workspace 6'
+    alt-7 = 'workspace 7'
+    alt-8 = 'workspace 8'
+    alt-9 = 'workspace 9'
+    
+    alt-shift-1 = 'move-node-to-workspace 1'
+    alt-shift-2 = 'move-node-to-workspace 2'
+    alt-shift-3 = 'move-node-to-workspace 3'
+    alt-shift-4 = 'move-node-to-workspace 4'
+    alt-shift-5 = 'move-node-to-workspace 5'
+    alt-shift-6 = 'move-node-to-workspace 6'
+    alt-shift-7 = 'move-node-to-workspace 7'
+    alt-shift-8 = 'move-node-to-workspace 8'
+    alt-shift-9 = 'move-node-to-workspace 9'
+    
+    alt-tab = 'workspace-back-and-forth'
+    alt-shift-tab = 'move-workspace-to-monitor --wrap-around next'
+    alt-shift-semicolon = 'mode service'
+
+[mode.service.binding]
+    esc = ['reload-config', 'mode main']
+    r = ['flatten-workspace-tree', 'mode main']
+    f = ['layout floating tiling', 'mode main']
+    backspace = ['close-all-windows-but-current', 'mode main']
+    
+    alt-shift-h = ['join-with left', 'mode main']
+    alt-shift-j = ['join-with down', 'mode main']
+    alt-shift-k = ['join-with up', 'mode main']
+    alt-shift-l = ['join-with right', 'mode main']
+    
+    down = 'volume down'
+    up = 'volume up'
+    shift-down = ['volume set 0', 'mode main']
+
+# Performance tips for this configuration:
+# 1. Visual effects are disabled by default
+# 2. Only essential animations are enabled
+# 3. GPU acceleration uses conservative settings
+# 4. Shorter animation durations for snappier feel
+# 5. Linear easing for fastest computation
+# 6. Lower concurrent animation limits
+# 7. Smaller gaps to reduce visual complexity

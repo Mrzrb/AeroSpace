@@ -125,6 +125,10 @@ private let configParser: [String: any ParserProtocol<Config>] = [
     "workspace-to-monitor-force-assignment": Parser(\.workspaceToMonitorForceAssignment, parseWorkspaceToMonitorAssignment),
     "on-window-detected": Parser(\.onWindowDetected, parseOnWindowDetectedArray),
 
+    "bsp": Parser(\.bsp, parseBSPConfig),
+    "animation": Parser(\.animation, parseAnimationConfig),
+    "animations": Parser(\.animation, parseAnimationConfig), // Support both singular and plural forms
+    "visual-effects": Parser(\.visualEffects, parseVisualEffectsConfig),
     // Deprecated
     "non-empty-workspaces-root-containers-layout-on-startup": Parser(\._nonEmptyWorkspacesRootContainersLayoutOnStartup, parseStartupRootContainerLayout),
     "indent-for-nested-containers-with-the-same-orientation": Parser(\._indentForNestedContainersWithTheSameOrientation, parseIndentForNestedContainersWithTheSameOrientation),
@@ -422,4 +426,248 @@ func expectedActualTypeError(expected: TOMLType, actual: TOMLType, _ backtrace: 
 
 func expectedActualTypeError(expected: [TOMLType], actual: TOMLType, _ backtrace: TomlBacktrace) -> TomlParseError {
     .semantic(backtrace, expectedActualTypeError(expected: expected, actual: actual))
+}
+
+
+
+private func parseDouble(_ raw: TOMLValueConvertible, _ backtrace: TomlBacktrace) -> ParsedToml<Double> {
+    if let doubleValue = raw.double {
+        return .success(doubleValue)
+    } else if let intValue = raw.int {
+        return .success(Double(intValue))
+    } else {
+        return .failure(expectedActualTypeError(expected: [.double, .int], actual: raw.type, backtrace))
+    }
+}
+
+private func parseOptionalOrientation(_ raw: TOMLValueConvertible, _ backtrace: TomlBacktrace) -> ParsedToml<Orientation?> {
+    if raw.string == nil {
+        return .success(nil)
+    }
+    return parseString(raw, backtrace).flatMap { str in
+        switch str.lowercased() {
+            case "horizontal", "h":
+                return .success(.h)
+            case "vertical", "v":
+                return .success(.v)
+            case "auto", "":
+                return .success(nil)
+            default:
+                return .failure(.semantic(backtrace, "Invalid orientation '\(str)'. Expected 'horizontal', 'vertical', or 'auto'"))
+        }
+    }
+}
+
+private let animationConfigParser: [String: any ParserProtocol<AnimationConfig>] = [
+    "enabled": Parser(\.enabled, parseBool),
+    "default-duration": Parser(\.defaultDuration, parseTimeInterval),
+    "easing-function": Parser(\.easingFunction, parseAnimationEasing),
+    "respect-system-preferences": Parser(\.respectSystemPreferences, parseBool),
+    "move-animation-enabled": Parser(\.moveAnimationEnabled, parseBool),
+    "resize-animation-enabled": Parser(\.resizeAnimationEnabled, parseBool),
+    "layout-change-animation-enabled": Parser(\.layoutChangeAnimationEnabled, parseBool),
+    "workspace-transition-animation-enabled": Parser(\.workspaceTransitionAnimationEnabled, parseBool),
+    "max-concurrent-animations": Parser(\.maxConcurrentAnimations, parseInt),
+    "adaptive-quality": Parser(\.adaptiveQuality, parseBool),
+    "min-frame-rate": Parser(\.minFrameRate, parseDouble),
+    "spring-damping": Parser(\.springDamping, parseFloat),
+    "spring-velocity": Parser(\.springVelocity, parseFloat),
+    "bounce-intensity": Parser(\.bounceIntensity, parseFloat),
+    "elastic-amplitude": Parser(\.elasticAmplitude, parseFloat),
+    "elastic-period": Parser(\.elasticPeriod, parseFloat),
+    "max-overshoot-pixels": Parser(\.maxOvershootPixels, parseDouble),
+    "gpu-acceleration-enabled": Parser(\.gpuAccelerationEnabled, parseBool),
+    "gpu-acceleration-mode": Parser(\.gpuAccelerationMode, parseGPUAccelerationMode),
+    "gpu-batch-size": Parser(\.gpuBatchSize, parseInt),
+    "gpu-fallback-threshold": Parser(\.gpuFallbackThreshold, parseDouble),
+]
+
+private func parseAnimationConfig(_ raw: TOMLValueConvertible, _ backtrace: TomlBacktrace, _ errors: inout [TomlParseError]) -> AnimationConfig {
+    let config = parseTable(raw, AnimationConfig(), animationConfigParser, backtrace, &errors)
+
+    // Validate the configuration
+    let validationErrors = config.validate()
+    for error in validationErrors {
+        errors.append(.semantic(backtrace, error))
+    }
+
+    return config
+}
+
+private func parseTimeInterval(_ raw: TOMLValueConvertible, _ backtrace: TomlBacktrace) -> ParsedToml<TimeInterval> {
+    parseDouble(raw, backtrace).map { TimeInterval($0) }
+}
+
+private func parseFloat(_ raw: TOMLValueConvertible, _ backtrace: TomlBacktrace) -> ParsedToml<Float> {
+    parseDouble(raw, backtrace).map { Float($0) }
+}
+
+private func parseAnimationEasing(_ raw: TOMLValueConvertible, _ backtrace: TomlBacktrace) -> ParsedToml<AnimationEasing> {
+    parseString(raw, backtrace).flatMap { str in
+        AnimationEasing.from(string: str)
+            .orFailure(.semantic(backtrace, "Invalid animation easing '\(str)'. Expected one of: \(AnimationEasing.allCases.map(\.rawValue).joined(separator: ", ")) or cubic-bezier(x1, y1, x2, y2) or spring(damping, velocity) or bounce(intensity) or elastic(amplitude, period)"))
+    }
+}
+
+private func parseGPUAccelerationMode(_ raw: TOMLValueConvertible, _ backtrace: TomlBacktrace) -> ParsedToml<GPUAccelerationMode> {
+    parseString(raw, backtrace).flatMap { str in
+        GPUAccelerationMode(rawValue: str)
+            .orFailure(.semantic(backtrace, "Invalid GPU acceleration mode '\(str)'. Expected one of: \(GPUAccelerationMode.allCases.map(\.rawValue).joined(separator: ", "))"))
+    }
+}
+
+// MARK: - Visual Effects Configuration Parsing
+
+private let visualEffectsConfigParser: [String: any ParserProtocol<VisualEffectsConfig>] = [
+    "enabled": Parser(\.enabled, parseBool),
+    "adaptive-quality": Parser(\.adaptiveQuality, parseBool),
+    "performance-threshold": Parser(\.performanceThreshold, parseDouble),
+    "max-concurrent-effects": Parser(\.maxConcurrentEffects, parseInt),
+    "effect-quality-level": Parser(\.effectQualityLevel, parseEffectQualityLevel),
+    "enable-gpu-acceleration": Parser(\.enableGPUAcceleration, parseBool),
+]
+
+private let motionBlurConfigParser: [String: any ParserProtocol<VisualEffectsConfig>] = [
+    "enabled": Parser(\.motionBlurEnabled, parseBool),
+    "velocity-threshold": Parser(\.motionBlurVelocityThreshold, parseDouble),
+    "max-speed": Parser(\.maxMotionBlurSpeed, parseDouble),
+    "max-intensity": Parser(\.maxMotionBlurIntensity, parseDouble),
+    "automatic-effects": Parser(\.automaticMotionEffects, parseBool),
+]
+
+private let afterimageConfigParser: [String: any ParserProtocol<VisualEffectsConfig>] = [
+    "enabled": Parser(\.afterimageEnabled, parseBool),
+    "trail-length": Parser(\.afterimageTrailLength, parseInt),
+    "opacity-decay": Parser(\.afterimageOpacityDecay, parseDouble),
+    "update-interval": Parser(\.afterimageUpdateInterval, parseTimeInterval),
+]
+
+private let particleConfigParser: [String: any ParserProtocol<VisualEffectsConfig>] = [
+    "enabled": Parser(\.particleEffectsEnabled, parseBool),
+    "count": Parser(\.particleCount, parseInt),
+    "size-width": Parser(\.particleSizeWidth, parseDouble),
+    "size-height": Parser(\.particleSizeHeight, parseDouble),
+    "duration": Parser(\.particleEffectDuration, parseTimeInterval),
+    "spread": Parser(\.particleSpread, parseDouble),
+    "velocity": Parser(\.particleVelocity, parseDouble),
+    "available-types": Parser(\.availableParticleTypes, parseParticleTypeArray),
+    "default-type": Parser(\.defaultParticleType, parseParticleType),
+]
+
+private let rippleConfigParser: [String: any ParserProtocol<VisualEffectsConfig>] = [
+    "enabled": Parser(\.rippleEffectsEnabled, parseBool),
+    "speed": Parser(\.rippleSpeed, parseDouble),
+    "max-radius": Parser(\.rippleMaxRadius, parseDouble),
+    "duration": Parser(\.rippleDuration, parseTimeInterval),
+    "intensity": Parser(\.rippleIntensity, parseDouble),
+]
+
+private func parseVisualEffectsConfig(_ raw: TOMLValueConvertible, _ backtrace: TomlBacktrace, _ errors: inout [TomlParseError]) -> VisualEffectsConfig {
+    guard let table = raw.table else {
+        errors.append(expectedActualTypeError(expected: .table, actual: raw.type, backtrace))
+        return VisualEffectsConfig()
+    }
+    
+    var config = VisualEffectsConfig()
+    
+    // Parse main visual effects settings
+    for (key, value) in table {
+        let keyBacktrace = backtrace + .key(key)
+        
+        switch key {
+        case "motion-blur":
+            if let motionBlurTable = value.table {
+                for (motionKey, motionValue) in motionBlurTable {
+                    let motionBacktrace = keyBacktrace + .key(motionKey)
+                    if let parser = motionBlurConfigParser[motionKey] {
+                        config = parser.transformRawConfig(config, motionValue, motionBacktrace, &errors)
+                    } else {
+                        errors.append(unknownKeyError(motionBacktrace))
+                    }
+                }
+            } else {
+                errors.append(expectedActualTypeError(expected: .table, actual: value.type, keyBacktrace))
+            }
+            
+        case "afterimage":
+            if let afterimageTable = value.table {
+                for (afterKey, afterValue) in afterimageTable {
+                    let afterBacktrace = keyBacktrace + .key(afterKey)
+                    if let parser = afterimageConfigParser[afterKey] {
+                        config = parser.transformRawConfig(config, afterValue, afterBacktrace, &errors)
+                    } else {
+                        errors.append(unknownKeyError(afterBacktrace))
+                    }
+                }
+            } else {
+                errors.append(expectedActualTypeError(expected: .table, actual: value.type, keyBacktrace))
+            }
+            
+        case "particles":
+            if let particleTable = value.table {
+                for (particleKey, particleValue) in particleTable {
+                    let particleBacktrace = keyBacktrace + .key(particleKey)
+                    if let parser = particleConfigParser[particleKey] {
+                        config = parser.transformRawConfig(config, particleValue, particleBacktrace, &errors)
+                    } else {
+                        errors.append(unknownKeyError(particleBacktrace))
+                    }
+                }
+            } else {
+                errors.append(expectedActualTypeError(expected: .table, actual: value.type, keyBacktrace))
+            }
+            
+        case "ripple":
+            if let rippleTable = value.table {
+                for (rippleKey, rippleValue) in rippleTable {
+                    let rippleBacktrace = keyBacktrace + .key(rippleKey)
+                    if let parser = rippleConfigParser[rippleKey] {
+                        config = parser.transformRawConfig(config, rippleValue, rippleBacktrace, &errors)
+                    } else {
+                        errors.append(unknownKeyError(rippleBacktrace))
+                    }
+                }
+            } else {
+                errors.append(expectedActualTypeError(expected: .table, actual: value.type, keyBacktrace))
+            }
+            
+        default:
+            if let parser = visualEffectsConfigParser[key] {
+                config = parser.transformRawConfig(config, value, keyBacktrace, &errors)
+            } else {
+                errors.append(unknownKeyError(keyBacktrace))
+            }
+        }
+    }
+    
+    // Validate the configuration
+    let validationErrors = config.validate()
+    for error in validationErrors {
+        errors.append(.semantic(backtrace, error))
+    }
+    
+    return config
+}
+
+private func parseEffectQualityLevel(_ raw: TOMLValueConvertible, _ backtrace: TomlBacktrace) -> ParsedToml<EffectQualityLevel> {
+    parseString(raw, backtrace).flatMap { str in
+        EffectQualityLevel(rawValue: str)
+            .orFailure(.semantic(backtrace, "Invalid effect quality level '\(str)'. Expected one of: \(EffectQualityLevel.allCases.map(\.rawValue).joined(separator: ", "))"))
+    }
+}
+
+private func parseParticleType(_ raw: TOMLValueConvertible, _ backtrace: TomlBacktrace) -> ParsedToml<ParticleType> {
+    parseString(raw, backtrace).flatMap { str in
+        ParticleType(rawValue: str)
+            .orFailure(.semantic(backtrace, "Invalid particle type '\(str)'. Expected one of: \(ParticleType.allCases.map(\.rawValue).joined(separator: ", "))"))
+    }
+}
+
+private func parseParticleTypeArray(_ raw: TOMLValueConvertible, _ backtrace: TomlBacktrace) -> ParsedToml<[ParticleType]> {
+    parseTomlArray(raw, backtrace).flatMap { array in
+        array.enumerated().mapAllOrFailure { (index, element) in
+            let elementBacktrace = backtrace + .index(index)
+            return parseParticleType(element, elementBacktrace)
+        }
+    }
 }

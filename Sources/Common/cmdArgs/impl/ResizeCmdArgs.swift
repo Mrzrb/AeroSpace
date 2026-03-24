@@ -36,6 +36,13 @@ public struct ResizeCmdArgs: CmdArgs {
         case set(UInt)
         case add(UInt)
         case subtract(UInt)
+        
+        public var isAbsoluteSet: Bool {
+            switch self {
+            case .set: return true
+            case .add, .subtract: return false
+            }
+        }
     }
 }
 
