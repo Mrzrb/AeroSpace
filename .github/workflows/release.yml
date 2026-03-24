@@ -13,28 +13,27 @@ on:
 
 jobs:
   build-and-release:
-    runs-on: macos-15 # 使用 macos-15 确保有最新的 Xcode
+    runs-on: macos-26
 
     steps:
       - name: Debug environment
         run: env
 
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
-      # 设置 Xcode 版本（参考成功的 build.yml）
-      - name: Setup Xcode
-        run: |
-          sw_vers -productVersion
-          if sw_vers -productVersion | grep -q "^13"; then # macOS 13
-            true # Xcode 16 is not supported on macOS 13 :(
-          else
-            sudo xcode-select -s "$XCODE_16_DEVELOPER_DIR" # Affects macOS SDK
-          fi
+      - name: Select Xcode
+        run: ./.github/gh-actions-runner-xcode-select.sh
 
-      # 安装构建工具（参考成功的 build.yml）
+      - name: Print toolchain versions
+        run: |
+          sw_vers
+          xcodebuild -version
+          xcrun swift --version
+          swift --version
+
       - name: Install build tools
         run: |
           brew update && brew install bash fish xcbeautify swiftly
@@ -56,14 +55,10 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
           echo "Building version: $VERSION"
 
-      # 构建发布版本（仅在 macos-15 上构建，参考成功的 build.yml）
       - name: Build release artifacts
         run: |
-          sw_vers -productVersion
-          if sw_vers -productVersion | grep -q "^15"; then
-            # "-" means "Sign to run locally". There is no aerospace-codesign-certificate on GH Actions
-            ./build-release.sh --build-version "${{ steps.version.outputs.VERSION }}" --codesign-identity -
-          fi
+          # "-" means "Sign to run locally". There is no aerospace-codesign-certificate on GH Actions
+          ./build-release.sh --build-version "${{ steps.version.outputs.VERSION }}" --codesign-identity -
 
       # 构建失败时显示日志（参考成功的 build.yml）
       - name: Show build logs on failure
@@ -138,7 +133,7 @@ jobs:
           - **Version**: ${{ steps.version.outputs.VERSION }}
           - **Commit**: [\`${{ github.sha }}\`](https://github.com/${{ github.repository }}/commit/${{ github.sha }})
           - **Build Date**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
-          - **Built on**: GitHub Actions (macOS-15)
+          - **Built on**: GitHub Actions (macOS-26)
 
           ### What's Included
           - **AeroSpace.app** - macOS application (Universal Binary)
