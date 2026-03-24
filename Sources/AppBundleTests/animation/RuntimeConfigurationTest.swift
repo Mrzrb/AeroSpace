@@ -2,6 +2,21 @@ import XCTest
 import AppKit
 @testable import AppBundle
 
+private final class LockedBox<Value>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: Value
+
+    init(_ value: Value) {
+        self.value = value
+    }
+
+    func withLock<R>(_ body: (inout Value) -> R) -> R {
+        lock.lock()
+        defer { lock.unlock() }
+        return body(&value)
+    }
+}
+
 @MainActor
 class RuntimeConfigurationTest: XCTestCase {
 
@@ -10,19 +25,16 @@ class RuntimeConfigurationTest: XCTestCase {
 
         // Set up notification observer
         let notificationExpectation = expectation(description: "Configuration change notification")
-        let configLock = NSLock()
-        var receivedOldConfig: AnimationConfig?
-        var receivedNewConfig: AnimationConfig?
+        let receivedOldConfig = LockedBox<AnimationConfig?>(nil)
+        let receivedNewConfig = LockedBox<AnimationConfig?>(nil)
 
         let observer = NotificationCenter.default.addObserver(
             forName: .animationConfigurationDidChange,
             object: animationEngine,
             queue: .main,
         ) { notification in
-            configLock.lock()
-            receivedOldConfig = notification.userInfo?["oldConfig"] as? AnimationConfig
-            receivedNewConfig = notification.userInfo?["newConfig"] as? AnimationConfig
-            configLock.unlock()
+            receivedOldConfig.withLock { $0 = notification.userInfo?["oldConfig"] as? AnimationConfig }
+            receivedNewConfig.withLock { $0 = notification.userInfo?["newConfig"] as? AnimationConfig }
             notificationExpectation.fulfill()
         }
 
@@ -42,10 +54,8 @@ class RuntimeConfigurationTest: XCTestCase {
         // Wait for notification
         wait(for: [notificationExpectation], timeout: 1.0)
 
-        configLock.lock()
-        let receivedOld = receivedOldConfig
-        let receivedNew = receivedNewConfig
-        configLock.unlock()
+        let receivedOld = receivedOldConfig.withLock { $0 }
+        let receivedNew = receivedNewConfig.withLock { $0 }
 
         XCTAssertNotNil(receivedOld, "Old configuration should be included in notification")
         XCTAssertNotNil(receivedNew, "New configuration should be included in notification")
@@ -225,8 +235,7 @@ class RuntimeConfigurationTest: XCTestCase {
 
         let notificationExpectation = expectation(description: "Configuration change notifications")
         notificationExpectation.expectedFulfillmentCount = 2
-        var notifications: [(old: AnimationConfig, new: AnimationConfig)] = []
-        let notificationsLock = NSLock()
+        let notifications = LockedBox<[(old: AnimationConfig, new: AnimationConfig)]>([])
 
         let observer = NotificationCenter.default.addObserver(
             forName: .animationConfigurationDidChange,
@@ -236,9 +245,7 @@ class RuntimeConfigurationTest: XCTestCase {
             if let oldConfig = notification.userInfo?["oldConfig"] as? AnimationConfig,
                let newConfig = notification.userInfo?["newConfig"] as? AnimationConfig
             {
-                notificationsLock.lock()
-                notifications.append((old: oldConfig, new: newConfig))
-                notificationsLock.unlock()
+                notifications.withLock { $0.append((old: oldConfig, new: newConfig)) }
                 notificationExpectation.fulfill()
             }
         }
@@ -263,11 +270,9 @@ class RuntimeConfigurationTest: XCTestCase {
         wait(for: [notificationExpectation], timeout: 2.0)
 
         // Verify we received notifications for both changes
-        notificationsLock.lock()
-        let notificationCount = notifications.count
-        let firstNotification = notifications.first
-        let secondNotification = notifications.count > 1 ? notifications[1] : nil
-        notificationsLock.unlock()
+        let notificationCount = notifications.withLock { $0.count }
+        let firstNotification = notifications.withLock { $0.first }
+        let secondNotification = notifications.withLock { $0.count > 1 ? $0[1] : nil }
 
         XCTAssertEqual(notificationCount, 2)
 

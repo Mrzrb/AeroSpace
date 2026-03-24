@@ -113,7 +113,7 @@ final class TilingContainerLayoutUpdateTest: XCTestCase {
         
         // Test case 1: Weights already valid
         let window1 = TestWindow.new(id: 1, parent: container, adaptiveWeight: 1.0)
-        let window2 = TestWindow.new(id: 2, parent: container, adaptiveWeight: 1.0)
+        let _ = TestWindow.new(id: 2, parent: container, adaptiveWeight: 1.0)
         
         let correctionsMade1 = container.validateAndCorrectBSPWeights(orientation: .h)
         XCTAssertFalse(correctionsMade1, "Should return false when no corrections needed")
@@ -131,42 +131,12 @@ final class TilingContainerLayoutUpdateTest: XCTestCase {
         // SKIP: This test is for a feature not yet implemented
         // The unified resize logic doesn't include complex weight validation
         return
-        let workspace = Workspace.get(byName: name)
-        let container = TilingContainer(parent: workspace, adaptiveWeight: 1.0, .h, .bsp, index: 0)
-        
-        // Add windows with one having excessive weight
-        let window1 = TestWindow.new(id: 1, parent: container, adaptiveWeight: 5.0) // Excessive
-        let window2 = TestWindow.new(id: 2, parent: container, adaptiveWeight: 1.0)
-        
-        let correctionsMade = container.validateAndCorrectBSPWeights(orientation: .h)
-        XCTAssertTrue(correctionsMade, "Should return true when corrections were made")
-        
-        // Verify maximum constraint was applied (90% of total space for 2 children = 1.8)
-        let maxAllowed = 0.9 * CGFloat(container.children.count)
-        XCTAssertLessThanOrEqual(window1.getWeight(.h), maxAllowed, "Weight should not exceed maximum")
     }
 
     func testValidateAndCorrectBSPWeightsNormalizesTotalWeight() {
         // SKIP: This test is for a feature not yet implemented
         // The unified resize logic doesn't include complex weight validation
         return
-        let workspace = Workspace.get(byName: name)
-        let container = TilingContainer(parent: workspace, adaptiveWeight: 1.0, .h, .bsp, index: 0)
-        
-        // Add windows with total weight that's too high
-        let window1 = TestWindow.new(id: 1, parent: container, adaptiveWeight: 10.0)
-        let window2 = TestWindow.new(id: 2, parent: container, adaptiveWeight: 10.0)
-        let window3 = TestWindow.new(id: 3, parent: container, adaptiveWeight: 10.0)
-        
-        let initialTotalWeight = container.children.sumOfDouble { $0.getWeight(.h) }
-        XCTAssertGreaterThan(initialTotalWeight, CGFloat(container.children.count) * 2.0, "Initial total weight should be excessive")
-        
-        let correctionsMade = container.validateAndCorrectBSPWeights(orientation: .h)
-        XCTAssertTrue(correctionsMade, "Should return true when normalization was applied")
-        
-        let finalTotalWeight = container.children.sumOfDouble { $0.getWeight(.h) }
-        let expectedTotalWeight = CGFloat(container.children.count) // Target: 1.0 per child
-        XCTAssertEqual(finalTotalWeight, expectedTotalWeight, accuracy: 0.01, "Total weight should be normalized")
     }
 
     func testValidateAndCorrectBSPWeightsHandlesZeroWeights() {
@@ -195,7 +165,7 @@ final class TilingContainerLayoutUpdateTest: XCTestCase {
         
         let initialRatio = window1.getWeight(.h) / window2.getWeight(.h)
         
-        let correctionsMade = container.validateAndCorrectBSPWeights(orientation: .h)
+        let _ = container.validateAndCorrectBSPWeights(orientation: .h)
         
         let finalRatio = window1.getWeight(.h) / window2.getWeight(.h)
         XCTAssertEqual(finalRatio, initialRatio, accuracy: 0.1, "Proportions should be approximately preserved when within BSP limits")

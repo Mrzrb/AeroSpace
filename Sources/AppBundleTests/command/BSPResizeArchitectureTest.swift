@@ -16,7 +16,7 @@ final class BSPResizeArchitectureTest: XCTestCase {
         let window1 = TestWindow.new(id: 1, parent: bspContainer, adaptiveWeight: 100.0)
         let window2 = TestWindow.new(id: 2, parent: bspContainer, adaptiveWeight: 100.0)
         
-        window1.focusWindow()
+        _ = window1.focusWindow()
         
         // Verify initial state
         XCTAssertEqual(bspContainer.layout, .bsp, "Container should be BSP layout")
@@ -51,7 +51,7 @@ final class BSPResizeArchitectureTest: XCTestCase {
         let window1 = TestWindow.new(id: 1, parent: bspContainer, adaptiveWeight: 0.01) // Below minimum
         let window2 = TestWindow.new(id: 2, parent: bspContainer, adaptiveWeight: 1000.0) // Very high
         
-        window1.focusWindow()
+        _ = window1.focusWindow()
         
         // Execute resize command
         let resizeCommand = ResizeCommand(args: ResizeCmdArgs(rawArgs: [], dimension: .width, units: .add(10)))
@@ -79,7 +79,7 @@ final class BSPResizeArchitectureTest: XCTestCase {
         let window1 = TestWindow.new(id: 1, parent: bspContainer, adaptiveWeight: 100.0)
         let window2 = TestWindow.new(id: 2, parent: bspContainer, adaptiveWeight: 100.0)
         
-        window1.focusWindow()
+        _ = window1.focusWindow()
         
         // Execute resize command
         let resizeCommand = ResizeCommand(args: ResizeCmdArgs(rawArgs: [], dimension: .width, units: .add(20)))
@@ -107,7 +107,7 @@ final class BSPResizeArchitectureTest: XCTestCase {
         let bspContainer = TilingContainer(parent: workspace, adaptiveWeight: 1.0, .h, .bsp, index: 0)
         let singleWindow = TestWindow.new(id: 1, parent: bspContainer, adaptiveWeight: 100.0)
         
-        singleWindow.focusWindow()
+        _ = singleWindow.focusWindow()
         
         // Try to resize single window
         let resizeCommand = ResizeCommand(args: ResizeCmdArgs(rawArgs: [], dimension: .width, units: .add(20)))
@@ -131,7 +131,7 @@ final class BSPResizeArchitectureTest: XCTestCase {
         let window1 = TestWindow.new(id: 1, parent: accordionContainer, adaptiveWeight: 100.0)
         let window2 = TestWindow.new(id: 2, parent: accordionContainer, adaptiveWeight: 100.0)
         
-        window1.focusWindow()
+        _ = window1.focusWindow()
         
         // Try to resize in unsupported layout
         let resizeCommand = ResizeCommand(args: ResizeCmdArgs(rawArgs: [], dimension: .width, units: .add(20)))
@@ -203,7 +203,7 @@ final class BSPResizeArchitectureTest: XCTestCase {
         let window1 = TestWindow.new(id: 1, parent: bspContainer, adaptiveWeight: 100.0)
         let window2 = TestWindow.new(id: 2, parent: bspContainer, adaptiveWeight: 100.0)
         
-        window1.focusWindow()
+        _ = window1.focusWindow()
         
         // Use absolute set (should not trigger comprehensive validation)
         let resizeCommand = ResizeCommand(args: ResizeCmdArgs(rawArgs: [], dimension: .width, units: .set(150)))
@@ -232,7 +232,7 @@ final class BSPResizeArchitectureTest: XCTestCase {
         let window1 = TestWindow.new(id: 1, parent: bspContainer, adaptiveWeight: 100.0)
         let window2 = TestWindow.new(id: 2, parent: bspContainer, adaptiveWeight: 100.0)
         
-        window1.focusWindow()
+        _ = window1.focusWindow()
         
         // Test smart resize (should use container's orientation)
         let smartResizeCommand = ResizeCommand(args: ResizeCmdArgs(rawArgs: [], dimension: .smart, units: .add(20)))

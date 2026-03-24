@@ -357,7 +357,7 @@ final class WindowAnimationEngineTest: XCTestCase {
 
     func testDisplayConfigurationChangeHandling() {
         let engine = WindowAnimationEngine.shared
-        let initialMetrics = engine.getPerformanceMetrics()
+        let _ = engine.getPerformanceMetrics()
 
         // Simulate display configuration change by posting notification
         NotificationCenter.default.post(

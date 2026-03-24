@@ -415,23 +415,6 @@ extension TilingContainer {
         // Temporarily disable intelligent rebalancing to fix resize issues
         appendToLog("intelligentBSPRebalance: Temporarily disabled to prevent resize conflicts")
         return
-
-        // Get current container dimensions for smart rebalancing
-        let containerRect = lastAppliedLayoutVirtualRect ?? Rect(topLeftX: 0, topLeftY: 0, width: 1920, height: 1080)
-
-        // Apply different rebalancing strategies based on container characteristics
-        if shouldUseAdaptiveRebalancing(containerRect: containerRect) {
-            applyAdaptiveRebalancing(containerRect: containerRect)
-        } else {
-            applyStandardRebalancing()
-        }
-
-        // Recursively rebalance child containers (only if not in resize mode)
-        for child in children {
-            if let childContainer = child as? TilingContainer, !childContainer.resizeInProgress {
-                childContainer.intelligentBSPRebalance()
-            }
-        }
     }
 
     /// Determines if adaptive rebalancing should be used based on container characteristics

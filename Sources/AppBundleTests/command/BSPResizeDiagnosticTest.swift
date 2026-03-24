@@ -111,7 +111,7 @@ final class BSPResizeDiagnosticTest: XCTestCase {
             }
             
             let window1 = TestWindow.new(id: 1, parent: container, adaptiveWeight: w1Init)
-            let window2 = TestWindow.new(id: 2, parent: container, adaptiveWeight: w2Init)
+            let _ = TestWindow.new(id: 2, parent: container, adaptiveWeight: w2Init)
             
             _ = window1.focusWindow()
             
@@ -140,7 +140,7 @@ final class BSPResizeDiagnosticTest: XCTestCase {
         
         // Test with problematic weights
         let window1 = TestWindow.new(id: 1, parent: container, adaptiveWeight: 5.5)
-        let window2 = TestWindow.new(id: 2, parent: container, adaptiveWeight: 0.1)
+        let _ = TestWindow.new(id: 2, parent: container, adaptiveWeight: 0.1)
         
         _ = window1.focusWindow()
         

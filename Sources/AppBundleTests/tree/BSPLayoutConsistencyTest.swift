@@ -107,8 +107,8 @@ class BSPLayoutConsistencyTest: XCTestCase {
         let rootContainer = workspace.rootTilingContainer
         rootContainer.layout = .bsp
         
-        let childContainer1 = TilingContainer(parent: rootContainer, adaptiveWeight: 1.0, .h, .bsp, index: 0)
-        let childContainer2 = TilingContainer(parent: rootContainer, adaptiveWeight: 1.0, .v, .bsp, index: 1)
+        let _ = TilingContainer(parent: rootContainer, adaptiveWeight: 1.0, .h, .bsp, index: 0)
+        let _ = TilingContainer(parent: rootContainer, adaptiveWeight: 1.0, .v, .bsp, index: 1)
         
         // When: Validating BSP layout consistency
         let isConsistent = rootContainer.validateBSPLayoutConsistency()
@@ -123,8 +123,8 @@ class BSPLayoutConsistencyTest: XCTestCase {
         let rootContainer = workspace.rootTilingContainer
         rootContainer.layout = .bsp
         
-        let childContainer1 = TilingContainer(parent: rootContainer, adaptiveWeight: 1.0, .h, .bsp, index: 0)
-        let childContainer2 = TilingContainer(parent: rootContainer, adaptiveWeight: 1.0, .v, .tiles, index: 1)
+        let _ = TilingContainer(parent: rootContainer, adaptiveWeight: 1.0, .h, .bsp, index: 0)
+        let _ = TilingContainer(parent: rootContainer, adaptiveWeight: 1.0, .v, .tiles, index: 1)
         
         // When: Validating BSP layout consistency
         let isConsistent = rootContainer.validateBSPLayoutConsistency()
@@ -153,7 +153,7 @@ class BSPLayoutConsistencyTest: XCTestCase {
         rootContainer.layout = .bsp
         
         let level1Container = TilingContainer(parent: rootContainer, adaptiveWeight: 1.0, .h, .bsp, index: 0)
-        let level2Container = TilingContainer(parent: level1Container, adaptiveWeight: 1.0, .v, .tiles, index: 0)
+        let _ = TilingContainer(parent: level1Container, adaptiveWeight: 1.0, .v, .tiles, index: 0)
         
         // When: Validating BSP layout consistency
         let isConsistent = rootContainer.validateBSPLayoutConsistency()
@@ -170,8 +170,8 @@ class BSPLayoutConsistencyTest: XCTestCase {
         let rootContainer = workspace.rootTilingContainer
         rootContainer.layout = .bsp
         
-        let childContainer1 = TilingContainer(parent: rootContainer, adaptiveWeight: 1.0, .h, .tiles, index: 0)
-        let childContainer2 = TilingContainer(parent: rootContainer, adaptiveWeight: 1.0, .v, .accordion, index: 1)
+        let _ = TilingContainer(parent: rootContainer, adaptiveWeight: 1.0, .h, .tiles, index: 0)
+        let _ = TilingContainer(parent: rootContainer, adaptiveWeight: 1.0, .v, .accordion, index: 1)
         
         // When: Getting consistency report
         let report = rootContainer.getBSPLayoutConsistencyReport()
@@ -204,7 +204,7 @@ class BSPLayoutConsistencyTest: XCTestCase {
         let rootContainer = workspace.rootTilingContainer
         rootContainer.layout = .bsp
         
-        let childContainer = TilingContainer(parent: rootContainer, adaptiveWeight: 1.0, .h, .bsp, index: 0)
+        let _ = TilingContainer(parent: rootContainer, adaptiveWeight: 1.0, .h, .bsp, index: 0)
         
         // When: Getting consistency report
         let report = rootContainer.getBSPLayoutConsistencyReport()
@@ -219,7 +219,7 @@ class BSPLayoutConsistencyTest: XCTestCase {
         let rootContainer = workspace.rootTilingContainer
         rootContainer.layout = .tiles
         
-        let childContainer = TilingContainer(parent: rootContainer, adaptiveWeight: 1.0, .h, .accordion, index: 0)
+        let _ = TilingContainer(parent: rootContainer, adaptiveWeight: 1.0, .h, .accordion, index: 0)
         
         // When: Getting consistency report
         let report = rootContainer.getBSPLayoutConsistencyReport()

@@ -48,7 +48,6 @@ struct ResizeCommand: Command { // todo cover with tests
         // First, we need to determine the basic resize parameters to calculate diff
         let preliminaryResult = findPreliminaryResizeTarget(candidates: candidates, dimension: args.dimension.val)
         guard let preliminaryNode = preliminaryResult.node,
-              let preliminaryParent = preliminaryResult.parent,
               let preliminaryOrientation = preliminaryResult.orientation else {
             appendToLog("ResizeCommand: No preliminary target found")
             return io.err("No suitable resize target found")
@@ -271,9 +270,7 @@ struct ResizeCommand: Command { // todo cover with tests
         let siblingCount = parent.children.count - 1
         
         guard siblingCount > 0 else { return 0 }
-        
-        let childDiff = diff / CGFloat(siblingCount)
-        
+
         // Calculate how much space is available for this resize
         var availableSpace: CGFloat = 0
         
@@ -314,7 +311,7 @@ struct ResizeCommand: Command { // todo cover with tests
         
         while let node = current, node.parent != nil {
             depth += 1
-            current = node.parent as? TreeNode
+            current = node.parent
         }
         
         return depth

@@ -239,14 +239,14 @@ final class MoveCommandBSPTest: XCTestCase {
         // Set up BSP layout with specific weights
         workspace.rootTilingContainer.layout = .bsp
         let root = workspace.rootTilingContainer.apply {
-            let window1 = TestWindow.new(id: 1, parent: $0, adaptiveWeight: 0.3)
+            let _ = TestWindow.new(id: 1, parent: $0, adaptiveWeight: 0.3)
             let window2 = TestWindow.new(id: 2, parent: $0, adaptiveWeight: 0.7)
             assertEquals(window2.focusWindow(), true)
         }
         
         // Store initial weights
-        let initialWeight1 = root.children[0].getWeight(.h)
-        let initialWeight2 = root.children[1].getWeight(.h)
+        let _ = root.children[0].getWeight(.h)
+        let _ = root.children[1].getWeight(.h)
         
         // Execute move command
         let result = try await MoveCommand(args: MoveCmdArgs(rawArgs: [], .left)).run(.defaultEnv, .emptyStdin)

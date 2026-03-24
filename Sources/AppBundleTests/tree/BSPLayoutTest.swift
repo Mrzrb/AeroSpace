@@ -257,10 +257,10 @@ class BSPLayoutTest: XCTestCase {
         let child = TestWindow.new(id: 1, parent: container, adaptiveWeight: 1.0)
 
         // When: Layout is calculated
-        let point = CGPoint(x: 0, y: 0)
+        let _ = CGPoint(x: 0, y: 0)
         let width: CGFloat = 800
         let height: CGFloat = 600
-        let virtual = Rect(topLeftX: 0, topLeftY: 0, width: width, height: height)
+        let _ = Rect(topLeftX: 0, topLeftY: 0, width: width, height: height)
 
         // Simulate layout calculation by checking the child gets full space
         XCTAssertEqual(container.children.count, 1, "Should have one child")
@@ -310,8 +310,8 @@ class BSPLayoutTest: XCTestCase {
         // Given: A BSP container with nested BSP containers
         let rootContainer = createTestContainer()
         let nestedContainer = TilingContainer(parent: rootContainer, adaptiveWeight: 0.5, .v, .bsp, index: 0)
-        let window1 = TestWindow.new(id: 1, parent: nestedContainer, adaptiveWeight: 0.6)
-        let window2 = TestWindow.new(id: 2, parent: nestedContainer, adaptiveWeight: 0.4)
+        let _ = TestWindow.new(id: 1, parent: nestedContainer, adaptiveWeight: 0.6)
+        let _ = TestWindow.new(id: 2, parent: nestedContainer, adaptiveWeight: 0.4)
         let window3 = TestWindow.new(id: 3, parent: rootContainer, adaptiveWeight: 0.5)
 
         // When: Checking nested structure
@@ -365,8 +365,8 @@ class BSPLayoutTest: XCTestCase {
         workspace.rootTilingContainer.layout = .bsp
         workspace.rootTilingContainer.changeOrientation(.h)
 
-        let window1 = TestWindow.new(id: 1, parent: workspace.rootTilingContainer, adaptiveWeight: 0.5)
-        let window2 = TestWindow.new(id: 2, parent: workspace.rootTilingContainer, adaptiveWeight: 0.5)
+        let _ = TestWindow.new(id: 1, parent: workspace.rootTilingContainer, adaptiveWeight: 0.5)
+        let _ = TestWindow.new(id: 2, parent: workspace.rootTilingContainer, adaptiveWeight: 0.5)
 
         // When: Finding the leftmost window (snapped to left edge)
         let leftWindow = workspace.rootTilingContainer.findLeafWindowRecursive(snappedTo: .left)
@@ -388,8 +388,8 @@ class BSPLayoutTest: XCTestCase {
         workspace.rootTilingContainer.layout = .bsp
         workspace.rootTilingContainer.changeOrientation(.v)
 
-        let window1 = TestWindow.new(id: 1, parent: workspace.rootTilingContainer, adaptiveWeight: 0.5)
-        let window2 = TestWindow.new(id: 2, parent: workspace.rootTilingContainer, adaptiveWeight: 0.5)
+        let _ = TestWindow.new(id: 1, parent: workspace.rootTilingContainer, adaptiveWeight: 0.5)
+        let _ = TestWindow.new(id: 2, parent: workspace.rootTilingContainer, adaptiveWeight: 0.5)
 
         // When: Finding the topmost window (snapped to up edge)
         let topWindow = workspace.rootTilingContainer.findLeafWindowRecursive(snappedTo: .up)
@@ -417,10 +417,10 @@ class BSPLayoutTest: XCTestCase {
         // Create right side container with vertical split
         let rightContainer = TilingContainer(parent: workspace.rootTilingContainer, adaptiveWeight: 0.5, .v, .bsp, index: 1)
         let topRightWindow = TestWindow.new(id: 2, parent: rightContainer, adaptiveWeight: 0.5)
-        let bottomRightWindow = TestWindow.new(id: 3, parent: rightContainer, adaptiveWeight: 0.5)
+        let _ = TestWindow.new(id: 3, parent: rightContainer, adaptiveWeight: 0.5)
 
         // When: Navigating from left window to the right
-        leftWindow.focusWindow()
+        _ = leftWindow.focusWindow()
         if let (parent, ownIndex) = leftWindow.closestParent(hasChildrenInDirection: .right, withLayout: nil) {
             let rightmostWindow = parent.children[ownIndex + CardinalDirection.right.focusOffset]
                 .findLeafWindowRecursive(snappedTo: .left)
@@ -433,7 +433,7 @@ class BSPLayoutTest: XCTestCase {
         }
 
         // When: Navigating within the right container vertically
-        topRightWindow.focusWindow()
+        _ = topRightWindow.focusWindow()
         if let (parent, ownIndex) = topRightWindow.closestParent(hasChildrenInDirection: .down, withLayout: nil) {
             let downWindow = parent.children[ownIndex + CardinalDirection.down.focusOffset]
                 .findLeafWindowRecursive(snappedTo: .up)
@@ -494,7 +494,7 @@ class BSPLayoutTest: XCTestCase {
         // Given: A BSP container with single window
         let workspace = Workspace.get(byName: "test")
         workspace.rootTilingContainer.layout = .bsp
-        let singleWindow = TestWindow.new(id: 1, parent: workspace.rootTilingContainer, adaptiveWeight: 1.0)
+        let _ = TestWindow.new(id: 1, parent: workspace.rootTilingContainer, adaptiveWeight: 1.0)
 
         // When: Navigating in any direction
         let rightWindow = workspace.rootTilingContainer.findLeafWindowRecursive(snappedTo: .left)
@@ -522,7 +522,7 @@ class BSPLayoutTest: XCTestCase {
         let window2 = TestWindow.new(id: 2, parent: workspace.rootTilingContainer, adaptiveWeight: 0.4)
 
         // When: Focusing window1 and moving right
-        window1.focusWindow()
+        _ = window1.focusWindow()
         try await MoveCommand(args: MoveCmdArgs(rawArgs: [], .right)).run(.defaultEnv, .emptyStdin)
 
         // Then: Windows should be swapped
@@ -546,11 +546,11 @@ class BSPLayoutTest: XCTestCase {
 
         // Create right container with vertical split
         let rightContainer = TilingContainer(parent: workspace.rootTilingContainer, adaptiveWeight: 0.5, .v, .bsp, index: 1)
-        let topRightWindow = TestWindow.new(id: 2, parent: rightContainer, adaptiveWeight: 0.5)
-        let bottomRightWindow = TestWindow.new(id: 3, parent: rightContainer, adaptiveWeight: 0.5)
+        let _ = TestWindow.new(id: 2, parent: rightContainer, adaptiveWeight: 0.5)
+        let _ = TestWindow.new(id: 3, parent: rightContainer, adaptiveWeight: 0.5)
 
         // When: Moving left window to the right
-        leftWindow.focusWindow()
+        _ = leftWindow.focusWindow()
         try await MoveCommand(args: MoveCmdArgs(rawArgs: [], .right)).run(.defaultEnv, .emptyStdin)
 
         // Then: Left window should move into the right container
@@ -576,10 +576,10 @@ class BSPLayoutTest: XCTestCase {
         let bottomLeftWindow = TestWindow.new(id: 2, parent: leftContainer, adaptiveWeight: 0.5)
 
         // Create right window
-        let rightWindow = TestWindow.new(id: 3, parent: workspace.rootTilingContainer, adaptiveWeight: 0.5)
+        let _ = TestWindow.new(id: 3, parent: workspace.rootTilingContainer, adaptiveWeight: 0.5)
 
         // When: Moving bottom left window to the right (out of its container)
-        bottomLeftWindow.focusWindow()
+        _ = bottomLeftWindow.focusWindow()
         try await MoveCommand(args: MoveCmdArgs(rawArgs: [], .right)).run(.defaultEnv, .emptyStdin)
 
         // Then: Bottom left window should move to root level
@@ -644,12 +644,12 @@ class BSPLayoutTest: XCTestCase {
 
         // Create two child containers with same orientation
         let leftContainer = TilingContainer(parent: rootContainer, adaptiveWeight: 0.5, .h, .bsp, index: 0)
-        let window1 = TestWindow.new(id: 1, parent: leftContainer, adaptiveWeight: 0.5)
-        let window2 = TestWindow.new(id: 2, parent: leftContainer, adaptiveWeight: 0.5)
+        let _ = TestWindow.new(id: 1, parent: leftContainer, adaptiveWeight: 0.5)
+        let _ = TestWindow.new(id: 2, parent: leftContainer, adaptiveWeight: 0.5)
 
         let rightContainer = TilingContainer(parent: rootContainer, adaptiveWeight: 0.5, .h, .bsp, index: 1)
-        let window3 = TestWindow.new(id: 3, parent: rightContainer, adaptiveWeight: 0.5)
-        let window4 = TestWindow.new(id: 4, parent: rightContainer, adaptiveWeight: 0.5)
+        let _ = TestWindow.new(id: 3, parent: rightContainer, adaptiveWeight: 0.5)
+        let _ = TestWindow.new(id: 4, parent: rightContainer, adaptiveWeight: 0.5)
 
         // When: Optimizing tree structure
         rootContainer.optimizeBSPTreeStructure()
@@ -667,8 +667,8 @@ class BSPLayoutTest: XCTestCase {
         let rootContainer = workspace.rootTilingContainer
         rootContainer.layout = .bsp
 
-        let window1 = TestWindow.new(id: 1, parent: rootContainer, adaptiveWeight: 0.6)
-        let window2 = TestWindow.new(id: 2, parent: rootContainer, adaptiveWeight: 0.4)
+        let _ = TestWindow.new(id: 1, parent: rootContainer, adaptiveWeight: 0.6)
+        let _ = TestWindow.new(id: 2, parent: rootContainer, adaptiveWeight: 0.4)
 
         // When: Validating tree structure
         let isValid = rootContainer.validateBSPTreeStructure()
@@ -688,7 +688,7 @@ class BSPLayoutTest: XCTestCase {
         let window2 = TestWindow.new(id: 2, parent: rootContainer, adaptiveWeight: 0.0)
 
         // When: Validating tree structure
-        let isValid = rootContainer.validateBSPTreeStructure()
+        let _ = rootContainer.validateBSPTreeStructure()
 
         // Then: Should fix the weights
         let totalWeight = rootContainer.children.map { $0.getWeight(rootContainer.orientation) }.reduce(0, +)
@@ -1042,12 +1042,12 @@ class BSPLayoutTest: XCTestCase {
         workspace.rootTilingContainer.layout = .bsp
         workspace.rootTilingContainer.changeOrientation(.v)
 
-        let window1 = TestWindow.new(id: 1, parent: workspace.rootTilingContainer, adaptiveWeight: 0.3)
+        let _ = TestWindow.new(id: 1, parent: workspace.rootTilingContainer, adaptiveWeight: 0.3)
         let window2 = TestWindow.new(id: 2, parent: workspace.rootTilingContainer, adaptiveWeight: 0.4)
-        let window3 = TestWindow.new(id: 3, parent: workspace.rootTilingContainer, adaptiveWeight: 0.3)
+        let _ = TestWindow.new(id: 3, parent: workspace.rootTilingContainer, adaptiveWeight: 0.3)
 
         // When: Moving middle window down
-        window2.focusWindow()
+        _ = window2.focusWindow()
         try await MoveCommand(args: MoveCmdArgs(rawArgs: [], .down)).run(.defaultEnv, .emptyStdin)
 
         // Then: Windows should be swapped
@@ -1066,7 +1066,7 @@ class BSPLayoutTest: XCTestCase {
         let singleWindow = TestWindow.new(id: 1, parent: workspace.rootTilingContainer, adaptiveWeight: 1.0)
 
         // When: Trying to move the window beyond workspace boundary
-        singleWindow.focusWindow()
+        _ = singleWindow.focusWindow()
         try await MoveCommand(args: MoveCmdArgs(rawArgs: [], .left)).run(.defaultEnv, .emptyStdin)
 
         // Then: Should handle boundary condition gracefully
@@ -1081,14 +1081,14 @@ class BSPLayoutTest: XCTestCase {
         workspace.rootTilingContainer.layout = .bsp
         workspace.rootTilingContainer.changeOrientation(.h)
 
-        let leftWindow = TestWindow.new(id: 1, parent: workspace.rootTilingContainer, adaptiveWeight: 0.5)
+        let _ = TestWindow.new(id: 1, parent: workspace.rootTilingContainer, adaptiveWeight: 0.5)
 
         let rightContainer = TilingContainer(parent: workspace.rootTilingContainer, adaptiveWeight: 0.5, .v, .bsp, index: 1)
         let topRightWindow = TestWindow.new(id: 2, parent: rightContainer, adaptiveWeight: 0.5)
-        let bottomRightWindow = TestWindow.new(id: 3, parent: rightContainer, adaptiveWeight: 0.5)
+        let _ = TestWindow.new(id: 3, parent: rightContainer, adaptiveWeight: 0.5)
 
         // When: Moving a window within the right container
-        topRightWindow.focusWindow()
+        _ = topRightWindow.focusWindow()
         try await MoveCommand(args: MoveCmdArgs(rawArgs: [], .down)).run(.defaultEnv, .emptyStdin)
 
         // Then: Should maintain BSP layout
@@ -1117,7 +1117,7 @@ class BSPLayoutTest: XCTestCase {
 
 
         // When: Focusing window1 and resizing width by +20 units
-        window1.focusWindow()
+        _ = window1.focusWindow()
         try await ResizeCommand(args: ResizeCmdArgs(rawArgs: [], dimension: .width, units: .add(20))).run(.defaultEnv, .emptyStdin)
 
         // Then: Window1 should be larger, window2 should be smaller
@@ -1156,7 +1156,7 @@ class BSPLayoutTest: XCTestCase {
         let window2 = TestWindow.new(id: 2, parent: workspace.rootTilingContainer, adaptiveWeight: 0.4)
 
         // When: Focusing window2 and resizing height by -10
-        window2.focusWindow()
+        _ = window2.focusWindow()
         try await ResizeCommand(args: ResizeCmdArgs(rawArgs: [], dimension: .height, units: .subtract(10))).run(.defaultEnv, .emptyStdin)
 
         // Then: Window2 should be smaller, window1 should be larger (weights will be constrained by BSP validation)
@@ -1177,7 +1177,7 @@ class BSPLayoutTest: XCTestCase {
         let window2 = TestWindow.new(id: 2, parent: workspace.rootTilingContainer, adaptiveWeight: 0.5)
 
         // When: Using smart resize (should use horizontal orientation)
-        window1.focusWindow()
+        _ = window1.focusWindow()
         try await ResizeCommand(args: ResizeCmdArgs(rawArgs: [], dimension: .smart, units: .set(80))).run(.defaultEnv, .emptyStdin)
 
         // Then: Should resize horizontally (weights will be validated and constrained)
@@ -1197,11 +1197,11 @@ class BSPLayoutTest: XCTestCase {
         // Create nested vertical container
         let nestedContainer = TilingContainer(parent: workspace.rootTilingContainer, adaptiveWeight: 0.5, .v, .bsp, index: 0)
         let window1 = TestWindow.new(id: 1, parent: nestedContainer, adaptiveWeight: 0.5)
-        let window2 = TestWindow.new(id: 2, parent: nestedContainer, adaptiveWeight: 0.5)
+        let _ = TestWindow.new(id: 2, parent: nestedContainer, adaptiveWeight: 0.5)
         let window3 = TestWindow.new(id: 3, parent: workspace.rootTilingContainer, adaptiveWeight: 0.5)
 
         // When: Using smart-opposite resize on window1 (should use horizontal orientation)
-        window1.focusWindow()
+        _ = window1.focusWindow()
         try await ResizeCommand(args: ResizeCmdArgs(rawArgs: [], dimension: .smartOpposite, units: .add(20))).run(.defaultEnv, .emptyStdin)
 
         // Then: Should resize the nested container horizontally (weights will be constrained by BSP validation)
@@ -1223,7 +1223,7 @@ class BSPLayoutTest: XCTestCase {
         let window3 = TestWindow.new(id: 3, parent: workspace.rootTilingContainer, adaptiveWeight: 0.3)
 
         // When: Resizing window2 by +20
-        window2.focusWindow()
+        _ = window2.focusWindow()
         try await ResizeCommand(args: ResizeCmdArgs(rawArgs: [], dimension: .width, units: .add(20))).run(.defaultEnv, .emptyStdin)
 
         // Then: Window2 should increase, others should decrease (within BSP limits)
@@ -1254,7 +1254,7 @@ class BSPLayoutTest: XCTestCase {
         let window3 = TestWindow.new(id: 3, parent: workspace.rootTilingContainer, adaptiveWeight: 0.5)
 
         // When: Resizing window1 vertically (within nested container)
-        window1.focusWindow()
+        _ = window1.focusWindow()
         try await ResizeCommand(args: ResizeCmdArgs(rawArgs: [], dimension: .height, units: .subtract(10))).run(.defaultEnv, .emptyStdin)
 
         // Then: Should resize within the nested container (weights will be constrained by BSP validation)
@@ -1276,7 +1276,7 @@ class BSPLayoutTest: XCTestCase {
         let singleWindow = TestWindow.new(id: 1, parent: workspace.rootTilingContainer, adaptiveWeight: 1.0)
 
         // When: Trying to resize the single window
-        singleWindow.focusWindow()
+        _ = singleWindow.focusWindow()
         try await ResizeCommand(args: ResizeCmdArgs(rawArgs: [], dimension: .smart, units: .add(20))).run(.defaultEnv, .emptyStdin)
 
         // Then: Should handle gracefully (weight might remain the same or adjust as appropriate)
@@ -1294,17 +1294,17 @@ class BSPLayoutTest: XCTestCase {
         let window1 = TestWindow.new(id: 1, parent: workspace.rootTilingContainer, adaptiveWeight: 1.0)
         let window2 = TestWindow.new(id: 2, parent: workspace.rootTilingContainer, adaptiveWeight: 1.0)
 
-        let initialWeight1 = window1.getWeight(.h)
-        let initialWeight2 = window2.getWeight(.h)
+        let _ = window1.getWeight(.h)
+        let _ = window2.getWeight(.h)
 
         // When: Focusing window1 and resizing width by +10 units
-        window1.focusWindow()
+        _ = window1.focusWindow()
         try await ResizeCommand(args: ResizeCmdArgs(rawArgs: [], dimension: .width, units: .add(10))).run(.defaultEnv, .emptyStdin)
 
         // Then: Window1 should be larger, window2 should be smaller
         let finalWeight1 = window1.getWeight(.h)
         let finalWeight2 = window2.getWeight(.h)
-        let totalWeight = workspace.rootTilingContainer.children.sumOfDouble { $0.getWeight(.h) }
+        let _ = workspace.rootTilingContainer.children.sumOfDouble { $0.getWeight(.h) }
 
         // Check that weights have changed in the expected direction
         XCTAssertGreaterThan(finalWeight1, finalWeight2, "Window1 should have more weight than window2 after resize")

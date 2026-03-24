@@ -104,7 +104,7 @@ final class BSPResizePercentageTest: XCTestCase {
         _ = window1.focusWindow()
         
         let initialW1 = window1.getWeight(.h)
-        let initialW2 = window2.getWeight(.h)
+        let _ = window2.getWeight(.h)
         
         // Resize +10% five times
         for _ in 1...5 {

@@ -178,8 +178,8 @@ final class BSPSmartResizeTest: XCTestCase {
         
         let deepWindow1 = TestWindow.new(id: 1, parent: level3, adaptiveWeight: 25.0)
         let deepWindow2 = TestWindow.new(id: 2, parent: level3, adaptiveWeight: 25.0)
-        let midWindow = TestWindow.new(id: 3, parent: level2, adaptiveWeight: 50.0)
-        let topWindow = TestWindow.new(id: 4, parent: level1, adaptiveWeight: 100.0)
+        let _ = TestWindow.new(id: 3, parent: level2, adaptiveWeight: 50.0)
+        let _ = TestWindow.new(id: 4, parent: level1, adaptiveWeight: 100.0)
         
         // Focus deep window and use smart resize
         _ = deepWindow1.focusWindow()
@@ -197,7 +197,7 @@ final class BSPSmartResizeTest: XCTestCase {
         let deepWindow2Weight = deepWindow2.getWeight(.h)
         let level3Weight = level3.getWeight(.v)
         let level2Weight = level2.getWeight(.h)
-        let level1Weight = level1.getWeight(.h)
+        let _ = level1.getWeight(.h)
         
         // Check if resize occurred at any level
         let level3Resized = (deepWindow1Weight != 25.0 || deepWindow2Weight != 25.0)

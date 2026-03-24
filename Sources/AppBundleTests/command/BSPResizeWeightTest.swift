@@ -52,7 +52,7 @@ final class BSPResizeWeightTest: XCTestCase {
         
         // Simulate the problematic scenario: weights around 5.5 (as seen in logs)
         let window1 = TestWindow.new(id: 1, parent: bspContainer, adaptiveWeight: 5.5)
-        let window2 = TestWindow.new(id: 2, parent: bspContainer, adaptiveWeight: 0.1)
+        let _ = TestWindow.new(id: 2, parent: bspContainer, adaptiveWeight: 0.1)
         
         _ = window1.focusWindow()
         
@@ -88,7 +88,7 @@ final class BSPResizeWeightTest: XCTestCase {
         
         // Use normalized weights (1.0 each)
         let window1 = TestWindow.new(id: 1, parent: bspContainer, adaptiveWeight: 1.0)
-        let window2 = TestWindow.new(id: 2, parent: bspContainer, adaptiveWeight: 1.0)
+        let _ = TestWindow.new(id: 2, parent: bspContainer, adaptiveWeight: 1.0)
         
         _ = window1.focusWindow()
         
