@@ -1,28 +1,26 @@
 public struct ListMonitorsCmdArgs: CmdArgs {
-    public let rawArgs: EquatableNoop<[String]>
-    public init(rawArgs: [String]) { self.rawArgs = .init(rawArgs) }
-    public static let parser: CmdParser<Self> = cmdParser(
+    /*conforms*/ public var commonState: CmdArgsCommonState
+    public init(rawArgs: StrArrSlice) { self.commonState = .init(rawArgs) }
+    public static let parser: CmdParser<Self> = .init(
         kind: .listMonitors,
         allowInConfig: false,
         help: list_monitors_help_generated,
-        options: [
+        flags: [
             "--focused": boolFlag(\.focused),
             "--mouse": boolFlag(\.mouse),
 
             // Formatting flags
-            "--format": ArgParser(\._format, parseFormat),
+            "--format": formatParser(\._format, for: .monitor),
             "--count": trueBoolFlag(\.outputOnlyCount),
             "--json": trueBoolFlag(\.json),
         ],
-        arguments: [],
+        posArgs: [],
         conflictingOptions: [
             ["--count", "--format"],
             ["--count", "--json"],
         ],
     )
 
-    /*conforms*/ public var windowId: UInt32?
-    /*conforms*/ public var workspaceName: WorkspaceName?
     public var focused: Bool?
     public var mouse: Bool?
     public var _format: [StringInterToken] = []
@@ -41,7 +39,7 @@ extension ListMonitorsCmdArgs {
     }
 }
 
-public func parseListMonitorsCmdArgs(_ args: [String]) -> ParsedCmd<ListMonitorsCmdArgs> {
+func parseListMonitorsCmdArgs(_ args: StrArrSlice) -> ParsedCmd<ListMonitorsCmdArgs> {
     parseSpecificCmdArgs(ListMonitorsCmdArgs(rawArgs: args), args)
         .flatMap { if $0.json, let msg = getErrorIfFormatIsIncompatibleWithJson($0._format) { .failure(msg) } else { .cmd($0) } }
 }

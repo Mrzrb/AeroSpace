@@ -3,7 +3,7 @@ import Common
 
 struct MoveWorkspaceToMonitorCommand: Command {
     let args: MoveWorkspaceToMonitorCmdArgs
-    /*conforms*/ var shouldResetClosedWindowsCache = true
+    /*conforms*/ let shouldResetClosedWindowsCache = true
 
     func run(_ env: CmdEnv, _ io: CmdIo) -> Bool {
         guard let target = args.resolveTargetOrReportError(env, io) else { return false }
@@ -12,7 +12,7 @@ struct MoveWorkspaceToMonitorCommand: Command {
 
         switch args.target.val.resolve(target.workspace.workspaceMonitor, wrapAround: args.wrapAround) {
             case .success(let targetMonitor):
-                if targetMonitor.monitorId == prevMonitor.monitorId {
+                if targetMonitor.monitorId_oneBased == prevMonitor.monitorId_oneBased {
                     return true
                 }
                 if targetMonitor.setActiveWorkspace(focusedWorkspace) {

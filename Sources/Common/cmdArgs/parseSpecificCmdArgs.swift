@@ -1,36 +1,37 @@
-public func parseSpecificCmdArgs<T: CmdArgs>(_ raw: T, _ args: [String]) -> ParsedCmd<T> {
-    var args = args
+func parseSpecificCmdArgs<T: CmdArgs>(_ raw: T, _ args: StrArrSlice) -> ParsedCmd<T> {
     var raw = raw
     var errors: [String] = []
 
-    var argumentIndex = 0
+    var posArgumentParserIndex = 0
     var options: Set<String> = Set()
+    var index = 0
 
-    while !args.isEmpty {
-        let arg = args.next()
+    while index < args.count {
+        let arg = args[index]
         if arg == "-h" || arg == "--help" {
             return .help(T.info.help)
         } else if arg.starts(with: "-") && !isResizeNegativeUnitsArg(raw, arg: arg) {
-            if let optionParser: any ArgParserProtocol<T> = T.parser.options[arg] {
+            if let optionParser = T.parser.flags[arg] {
+                index += 1
                 if !options.insert(arg).inserted {
                     errors.append("Duplicated option \(arg.singleQuoted)")
                 }
-                raw = optionParser.transformRaw(raw, arg, &args, &errors)
+                raw = optionParser.transformRaw(raw, &index, SubArgParserInput(superArg: arg, index: index, args: args), &errors)
             } else {
                 errors.append("Unknown flag \(arg.singleQuoted)")
                 break
             }
-        } else if let parser = T.parser.arguments.getOrNil(atIndex: argumentIndex) {
-            raw = parser.transformRaw(raw, arg, &args, &errors)
-            argumentIndex += 1
+        } else if let parser = T.parser.positionalArgs.getOrNil(atIndex: posArgumentParserIndex) {
+            raw = parser.transformRaw(raw, &index, PosArgParserInput(index: index, args: args), &errors)
+            posArgumentParserIndex += 1
         } else {
             errors.append("Unknown argument \(arg.singleQuoted)")
             break
         }
     }
 
-    for arg in T.parser.arguments[argumentIndex...] {
-        if let placeholder = arg.argPlaceholderIfMandatory {
+    for arg in T.parser.positionalArgs[posArgumentParserIndex...] {
+        if let placeholder = arg.context.argPlaceholderIfMandatory {
             errors.append("Argument \(placeholder.singleQuoted) is mandatory")
         }
     }
@@ -79,24 +80,19 @@ public enum ParsedCmd<T: Sendable>: Sendable {
     }
 
     public func unwrap() -> (T?, String?, String?) {
-        var command: T? = nil
-        var error: String? = nil
-        var help: String? = nil
         switch self {
-            case .cmd(let _command):
-                command = _command
-            case .help(let _help):
-                help = _help
-            case .failure(let _error):
-                error = _error
+            case .cmd(let command):   (command, nil, nil)
+            case .help(let help):     (nil, help, nil)
+            case .failure(let error): (nil, nil, error)
         }
-        return (command, help, error)
     }
 }
 
-extension ArgParserProtocol {
-    fileprivate func transformRaw(_ raw: T, _ arg: String, _ args: inout [String], _ errors: inout [String]) -> T {
-        if let value = parse(arg, &args).getOrNil(appendErrorTo: &errors) {
+extension ArgParserProtocol where Root: ConvenienceCopyable {
+    fileprivate func transformRaw(_ raw: consuming Root, _ index: inout Int, _ input: Input, _ errors: inout [String]) -> Root {
+        let parsedCliArgs = parse(input)
+        index += parsedCliArgs.advanceBy
+        if let value = parsedCliArgs.value.getOrNil(appendErrorTo: &errors) {
             return raw.copy(keyPath, value)
         } else {
             return raw

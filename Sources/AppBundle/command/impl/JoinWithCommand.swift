@@ -3,7 +3,7 @@ import Common
 
 struct JoinWithCommand: Command {
     let args: JoinWithCmdArgs
-    /*conforms*/ var shouldResetClosedWindowsCache = true
+    /*conforms*/ let shouldResetClosedWindowsCache = true
 
     func run(_ env: CmdEnv, _ io: CmdIo) -> Bool {
         let direction = args.direction.val
@@ -12,7 +12,7 @@ struct JoinWithCommand: Command {
             return io.err(noWindowIsFocused)
         }
         guard let (parent, ownIndex) = currentWindow.closestParent(hasChildrenInDirection: direction, withLayout: nil) else {
-            return io.err("No windows in specified direction")
+            return io.err("No windows in the specified direction")
         }
         let joinWithTarget = parent.children[ownIndex + direction.focusOffset]
         let prevBinding = joinWithTarget.unbindFromParent()

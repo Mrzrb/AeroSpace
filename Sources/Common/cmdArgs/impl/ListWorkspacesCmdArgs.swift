@@ -4,12 +4,12 @@ let onitor = "<monitor>"
 let _monitors = "\(onitor)..."
 
 public struct ListWorkspacesCmdArgs: CmdArgs {
-    public let rawArgs: EquatableNoop<[String]>
-    public static let parser: CmdParser<Self> = cmdParser(
+    /*conforms*/ public var commonState: CmdArgsCommonState
+    public static let parser: CmdParser<Self> = .init(
         kind: .listWorkspaces,
         allowInConfig: false,
         help: list_workspaces_help_generated,
-        options: [
+        flags: [
             // Aliases
             "--focused": trueBoolFlag(\.focused),
             "--all": trueBoolFlag(\.all),
@@ -20,11 +20,11 @@ public struct ListWorkspacesCmdArgs: CmdArgs {
             "--monitor": ArgParser(\.filteringOptions.onMonitors, parseMonitorIds),
 
             // Formatting flags
-            "--format": ArgParser(\._format, parseFormat),
+            "--format": formatParser(\._format, for: .workspace),
             "--count": trueBoolFlag(\.outputOnlyCount),
             "--json": trueBoolFlag(\.json),
         ],
-        arguments: [],
+        posArgs: [],
         conflictingOptions: [
             ["--all", "--focused", "--monitor"],
             ["--count", "--format"],
@@ -35,8 +35,6 @@ public struct ListWorkspacesCmdArgs: CmdArgs {
     fileprivate var all: Bool = false // Alias
     fileprivate var focused: Bool = false // Alias
 
-    /*conforms*/ public var windowId: UInt32?
-    /*conforms*/ public var workspaceName: WorkspaceName?
     public var filteringOptions = FilteringOptions()
     public var _format: [StringInterToken] = [.interVar("workspace")]
     public var outputOnlyCount: Bool = false
@@ -53,8 +51,8 @@ extension ListWorkspacesCmdArgs {
     public var format: [StringInterToken] { _format.isEmpty ? [.interVar("workspace")] : _format }
 }
 
-public func parseListWorkspacesCmdArgs(_ args: [String]) -> ParsedCmd<ListWorkspacesCmdArgs> {
-    parseSpecificCmdArgs(ListWorkspacesCmdArgs(rawArgs: .init(args)), args)
+func parseListWorkspacesCmdArgs(_ args: StrArrSlice) -> ParsedCmd<ListWorkspacesCmdArgs> {
+    parseSpecificCmdArgs(ListWorkspacesCmdArgs(commonState: .init(args)), args)
         .filter("Mandatory option is not specified (--all|--focused|--monitor)") { raw in
             raw.all || raw.focused || !raw.filteringOptions.onMonitors.isEmpty
         }
@@ -77,27 +75,30 @@ public func parseListWorkspacesCmdArgs(_ args: [String]) -> ParsedCmd<ListWorksp
         .flatMap { if $0.json, let msg = getErrorIfFormatIsIncompatibleWithJson($0._format) { .failure(msg) } else { .cmd($0) } }
 }
 
-func parseMonitorIds(arg: String, nextArgs: inout [String]) -> Parsed<[MonitorId]> {
-    let args = nextArgs.allNextNonFlagArgs()
+func parseMonitorIds(input: SubArgParserInput) -> ParsedCliArgs<[MonitorId]> {
+    let args = input.nonFlagArgs()
     let possibleValues = "\(onitor) possible values: (<monitor-id>|focused|mouse|all)"
     if args.isEmpty {
-        return .failure("\(_monitors) is mandatory. \(possibleValues)")
+        return .fail("\(_monitors) is mandatory. \(possibleValues)", advanceBy: args.count)
     }
     var monitors: [MonitorId] = []
-    for monitor: String in args {
-        if let unwrapped = Int(monitor) {
-            monitors.append(.index(unwrapped - 1))
-        } else if monitor == "mouse" {
-            monitors.append(.mouse)
-        } else if monitor == "all" {
-            monitors.append(.all)
-        } else if monitor == "focused" {
-            monitors.append(.focused)
-        } else {
-            return .failure("Can't parse monitor ID '\(monitor)'. \(possibleValues)")
+    var i = 0
+    for monitor in args {
+        switch Int.init(monitor) {
+            case .some(let unwrapped):
+                monitors.append(.index(unwrapped - 1))
+            case _ where monitor == "mouse":
+                monitors.append(.mouse)
+            case _ where monitor == "all":
+                monitors.append(.all)
+            case _ where monitor == "focused":
+                monitors.append(.focused)
+            default:
+                return .fail("Can't parse monitor ID '\(monitor)'. \(possibleValues)", advanceBy: i + 1)
         }
+        i += 1
     }
-    return .success(monitors)
+    return .succ(monitors, advanceBy: monitors.count)
 }
 
 public enum MonitorId: Equatable, Sendable {

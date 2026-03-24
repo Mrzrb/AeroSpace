@@ -21,7 +21,7 @@ private func appendToLog(_ message: String) {
     }
 }
 
-class TilingContainer: TreeNode, NonLeafTreeNodeObject { // todo consider renaming to GenericContainer
+final class TilingContainer: TreeNode, NonLeafTreeNodeObject { // todo consider renaming to GenericContainer
     fileprivate var _orientation: Orientation
     var orientation: Orientation { _orientation }
     var layout: Layout
@@ -1282,7 +1282,7 @@ extension TilingContainer {
             if let window = children[i] as? Window {
                 // Give more space to certain types of applications
                 if let macApp = window.app as? MacApp,
-                   let bundleId = macApp.bundleId {
+                   let bundleId = macApp.rawAppBundleId {
                     if bundleId.contains("editor") || bundleId.contains("ide") || bundleId.contains("xcode") {
                         weight *= 1.2
                     }

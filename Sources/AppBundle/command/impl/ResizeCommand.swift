@@ -23,7 +23,7 @@ private func appendToLog(_ message: String) {
 
 struct ResizeCommand: Command { // todo cover with tests
     let args: ResizeCmdArgs
-    /*conforms*/ var shouldResetClosedWindowsCache = true
+    /*conforms*/ let shouldResetClosedWindowsCache = true
 
     @MainActor
     func run(_ env: CmdEnv, _ io: CmdIo) async throws -> Bool {

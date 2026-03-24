@@ -1,27 +1,25 @@
 public struct ListAppsCmdArgs: CmdArgs {
-    public let rawArgs: EquatableNoop<[String]>
-    public init(rawArgs: [String]) { self.rawArgs = .init(rawArgs) }
-    public static let parser: CmdParser<Self> = cmdParser(
+    /*conforms*/ public var commonState: CmdArgsCommonState
+    public init(rawArgs: StrArrSlice) { self.commonState = .init(rawArgs) }
+    public static let parser: CmdParser<Self> = .init(
         kind: .listApps,
         allowInConfig: false,
         help: list_apps_help_generated,
-        options: [
+        flags: [
             "--macos-native-hidden": boolFlag(\.macosHidden),
 
             // Formatting flags
-            "--format": ArgParser(\._format, parseFormat),
+            "--format": formatParser(\._format, for: .app),
             "--count": trueBoolFlag(\.outputOnlyCount),
             "--json": trueBoolFlag(\.json),
         ],
-        arguments: [],
+        posArgs: [],
         conflictingOptions: [
             ["--count", "--format"],
             ["--count", "--json"],
         ],
     )
 
-    /*conforms*/ public var windowId: UInt32?
-    /*conforms*/ public var workspaceName: WorkspaceName?
     public var macosHidden: Bool?
     public var _format: [StringInterToken] = []
     public var outputOnlyCount: Bool = false
@@ -40,7 +38,7 @@ extension ListAppsCmdArgs {
     }
 }
 
-public func parseListAppsCmdArgs(_ args: [String]) -> ParsedCmd<ListAppsCmdArgs> {
+func parseListAppsCmdArgs(_ args: StrArrSlice) -> ParsedCmd<ListAppsCmdArgs> {
     parseSpecificCmdArgs(ListAppsCmdArgs(rawArgs: args), args)
         .flatMap { if $0.json, let msg = getErrorIfFormatIsIncompatibleWithJson($0._format) { .failure(msg) } else { .cmd($0) } }
 }

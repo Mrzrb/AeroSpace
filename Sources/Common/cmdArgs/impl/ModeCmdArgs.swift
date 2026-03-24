@@ -1,19 +1,15 @@
 public struct ModeCmdArgs: CmdArgs {
-    public let rawArgs: EquatableNoop<[String]>
-    public init(rawArgs: [String]) { self.rawArgs = .init(rawArgs) }
-    public static let parser: CmdParser<Self> = cmdParser(
+    /*conforms*/ public var commonState: CmdArgsCommonState
+    public init(rawArgs: StrArrSlice) { self.commonState = .init(rawArgs) }
+    public static let parser: CmdParser<Self> = .init(
         kind: .mode,
         allowInConfig: true,
         help: mode_help_generated,
-        options: [:],
-        arguments: [newArgParser(\.targetMode, parseTargetMode, mandatoryArgPlaceholder: "<binding-mode>")],
+        flags: [:],
+        posArgs: [newMandatoryPosArgParser(\.targetMode, consumeStrCliArg, placeholder: "<binding-mode>")],
     )
 
     public var targetMode: Lateinit<String> = .uninitialized
-    /*conforms*/ public var windowId: UInt32?
-    /*conforms*/ public var workspaceName: WorkspaceName?
 }
 
-private func parseTargetMode(arg: String, nextArgs: inout [String]) -> Parsed<String> {
-    .success(arg)
-}
+func consumeStrCliArg(i: PosArgParserInput) -> ParsedCliArgs<String> { .succ(i.arg, advanceBy: 1) }

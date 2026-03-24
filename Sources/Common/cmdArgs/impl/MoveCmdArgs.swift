@@ -1,26 +1,24 @@
 public struct MoveCmdArgs: CmdArgs {
-    public let rawArgs: EquatableNoop<[String]>
-    fileprivate init(rawArgs: [String]) { self.rawArgs = .init(rawArgs) }
-    public static let parser: CmdParser<Self> = cmdParser(
+    /*conforms*/ public var commonState: CmdArgsCommonState
+    fileprivate init(rawArgs: StrArrSlice) { self.commonState = .init(rawArgs) }
+    public static let parser: CmdParser<Self> = .init(
         kind: .move,
         allowInConfig: true,
         help: move_help_generated,
-        options: [
+        flags: [
             "--window-id": optionalWindowIdFlag(),
             "--boundaries": ArgParser(\.rawBoundaries, upcastArgParserFun(parseBoundaries)),
             "--boundaries-action": ArgParser(\.rawBoundariesAction, upcastArgParserFun(parseBoundariesAction)),
         ],
-        arguments: [newArgParser(\.direction, parseCardinalDirectionArg, mandatoryArgPlaceholder: CardinalDirection.unionLiteral)],
+        posArgs: [newMandatoryPosArgParser(\.direction, parseCardinalDirectionArg, placeholder: CardinalDirection.unionLiteral)],
     )
 
     public var direction: Lateinit<CardinalDirection> = .uninitialized
-    /*conforms*/ public var windowId: UInt32?
-    /*conforms*/ public var workspaceName: WorkspaceName?
     public var rawBoundaries: Boundaries? = nil
     public var rawBoundariesAction: WhenBoundariesCrossed? = nil
 
     public init(rawArgs: [String], _ direction: CardinalDirection) {
-        self.rawArgs = .init(rawArgs)
+        self.commonState = .init(rawArgs.slice)
         self.direction = .initialized(direction)
     }
 
@@ -41,22 +39,22 @@ extension MoveCmdArgs {
     public var boundariesAction: WhenBoundariesCrossed { rawBoundariesAction ?? .createImplicitContainer }
 }
 
-public func parseMoveCmdArgs(_ args: [String]) -> ParsedCmd<MoveCmdArgs> {
+func parseMoveCmdArgs(_ args: StrArrSlice) -> ParsedCmd<MoveCmdArgs> {
     parseSpecificCmdArgs(MoveCmdArgs(rawArgs: args), args)
 }
 
-private func parseBoundaries(arg: String, nextArgs: inout [String]) -> Parsed<MoveCmdArgs.Boundaries> {
-    if let arg = nextArgs.nextNonFlagOrNil() {
-        return parseEnum(arg, MoveCmdArgs.Boundaries.self)
+private func parseBoundaries(i: SubArgParserInput) -> ParsedCliArgs<MoveCmdArgs.Boundaries> {
+    if let arg = i.nonFlagArgOrNil() {
+        return .init(parseEnum(arg, MoveCmdArgs.Boundaries.self), advanceBy: 1)
     } else {
-        return .failure("<boundary> is mandatory")
+        return .fail("<boundary> is mandatory", advanceBy: 0)
     }
 }
 
-private func parseBoundariesAction(arg: String, nextArgs: inout [String]) -> Parsed<MoveCmdArgs.WhenBoundariesCrossed> {
-    if let arg = nextArgs.nextNonFlagOrNil() {
-        return parseEnum(arg, MoveCmdArgs.WhenBoundariesCrossed.self)
+private func parseBoundariesAction(i: SubArgParserInput) -> ParsedCliArgs<MoveCmdArgs.WhenBoundariesCrossed> {
+    if let arg = i.nonFlagArgOrNil() {
+        return .init(parseEnum(arg, MoveCmdArgs.WhenBoundariesCrossed.self), advanceBy: 1)
     } else {
-        return .failure("<action> is mandatory")
+        return .fail("<action> is mandatory", advanceBy: 0)
     }
 }

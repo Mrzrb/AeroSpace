@@ -4,19 +4,19 @@ import Common
 @MainActor
 private var moveWithMouseTask: Task<(), any Error>? = nil
 
-func movedObs(_ obs: AXObserver, ax: AXUIElement, notif: CFString, data: UnsafeMutableRawPointer?) {
+func movedObs(_: AXObserver, ax: AXUIElement, notif: CFString, _: UnsafeMutableRawPointer?) {
     let windowId = ax.containingWindowId()
     let notif = notif as String
     Task { @MainActor in
         guard let token: RunSessionGuard = .isServerEnabled else { return }
         guard let windowId, let window = Window.get(byId: windowId), try await isManipulatedWithMouse(window) else {
-            runRefreshSession(.ax(notif))
+            scheduleRefreshSession(.ax(notif))
             return
         }
         moveWithMouseTask?.cancel()
         moveWithMouseTask = Task {
             try checkCancellation()
-            try await runSession(.ax(notif), token) {
+            try await runLightSession(.ax(notif), token) {
                 try await moveWithMouse(window)
             }
         }

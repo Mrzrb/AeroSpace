@@ -28,7 +28,7 @@ If you struggle to build AeroSpace locally, you can also refer to [builds in Git
 ## 2. Create codesign certificate
 
 If you want to run AeroSpace as App Bundle (AeroSpace.app) you need to create self-signed certificate that will be used to codesign AeroSpace.
-Release artifact is build as App Bundle.
+Release artifact is built as App Bundle.
 If you only plan to build the debug version of AeroSpace, you can run it from the terminal and custom certificate is not required.
 
 1.  Open `Keychain Access.app`
@@ -50,9 +50,6 @@ If you only plan to build the debug version of AeroSpace, you can run it from th
     You can test that the completion works properly by sourcing the file `source ./.shell-completion/zsh/_aerospace`
 -   `generate.sh` - Regenerate generated project files. `AeroSpace.xcodeproj` is generated, and some of the source files
     (the source files have `Generated` suffix in their names).
-
-> [!IMPORTANT]
-> Debug build uses `~/.aerospace-debug.toml` instead of `~/.aerospace.toml`
 
 **Release build**
 -   `build-release.sh` - Build release build to `.release` dir by using Xcode.

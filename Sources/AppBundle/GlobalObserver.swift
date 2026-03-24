@@ -1,7 +1,7 @@
 import AppKit
 import Common
 
-class GlobalObserver {
+enum GlobalObserver {
     private static func onNotif(_ notification: Notification) {
         // Third line of defence against lock screen window. See: closedWindowsCache
         // Second and third lines of defence are technically needed only to avoid potential flickering
@@ -12,9 +12,9 @@ class GlobalObserver {
         Task { @MainActor in
             if !TrayMenuModel.shared.isEnabled { return }
             if notifName == NSWorkspace.didActivateApplicationNotification.rawValue {
-                runRefreshSession(.globalObserver(notifName), optimisticallyPreLayoutWorkspaces: true)
+                scheduleRefreshSession(.globalObserver(notifName), optimisticallyPreLayoutWorkspaces: true)
             } else {
-                runRefreshSession(.globalObserver(notifName))
+                scheduleRefreshSession(.globalObserver(notifName))
             }
         }
     }
@@ -23,7 +23,7 @@ class GlobalObserver {
         let notifName = notification.name.rawValue
         Task { @MainActor in
             guard let token: RunSessionGuard = .isServerEnabled else { return }
-            try await runSession(.globalObserver(notifName), token) {
+            try await runLightSession(.globalObserver(notifName), token) {
                 if config.automaticallyUnhideMacosHiddenApps {
                     if let w = prevFocus?.windowOrNil,
                        w.macAppUnsafe.nsApp.isHidden,
@@ -65,13 +65,13 @@ class GlobalObserver {
                 switch true {
                     // Detect clicks on desktop of different monitors
                     case clickedMonitor.activeWorkspace != focus.workspace:
-                        _ = try await runSession(.globalObserverLeftMouseUp, token) {
+                        _ = try await runLightSession(.globalObserverLeftMouseUp, token) {
                             clickedMonitor.activeWorkspace.focusWorkspace()
                         }
                     // Detect close button clicks for unfocused windows. Yes, kAXUIElementDestroyedNotification is that unreliable
                     //  And trigger new window detection that could be delayed due to mouseDown event
                     default:
-                        runRefreshSession(.globalObserverLeftMouseUp)
+                        scheduleRefreshSession(.globalObserverLeftMouseUp)
                 }
             }
         }

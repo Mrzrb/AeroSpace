@@ -1,4 +1,4 @@
-name: Build
+name: build
 
 on:
   push:
@@ -11,99 +11,52 @@ on:
     - cron: '0 0 * * *' # every day at 00:00
 
 jobs:
-  build:
+
+  build-debug:
     strategy:
       # fail-fast: false # Disable fail-fast in matrix
       matrix:
-        # https://docs.github.com/en/actions/using-github-hosted-runners/using-github-hosted-runners/about-github-hosted-runners#standard-github-hosted-runners-for-public-repositories
-        # https://github.com/actions/runner-images/blob/main/images/macos/macos-13-Readme.md
+        # https://docs.github.com/en/actions/reference/runners/github-hosted-runners#standard-github-hosted-runners-for-public-repositories
         # https://github.com/actions/runner-images/blob/main/images/macos/macos-14-arm64-Readme.md
         # https://github.com/actions/runner-images/blob/main/images/macos/macos-15-arm64-Readme.md
+        # https://github.com/actions/runner-images/blob/main/images/macos/macos-26-arm64-Readme.md
         #
         # Xcode versions:
         # - https://en.wikipedia.org/wiki/Xcode
         # - https://xcodereleases.com/?scope=release
-        os: [macos-13, macos-14, macos-15]
-    name: Build
+        os: [macos-14, macos-15, macos-26]
+    name: build-debug
     runs-on: ${{ matrix.os }}
-
     steps:
       - run: env # Debug
-      - uses: actions/checkout@v4
-      - name: xcode-select
+      - uses: actions/checkout@v6
+      - run: ./.github/gh-actions-runner-xcode-select.sh
+      - run: brew install swiftly
+      - run: swiftly init --skip-install --assume-yes --verbose && swiftly install
+      - run: ./build-debug.sh
+      - run: ./run-tests.sh
+
+  # We build release artifacts only on the latest macOS versions because:
+  # 1. It cuts the build time twice on GH Actions
+  # 2. The latest Xcode version is not available on old macOS, and old Xcode versions bundle too old Swift version
+  build-release:
+    strategy:
+      # fail-fast: false # Disable fail-fast in matrix
+      matrix:
+        os: [macos-15, macos-26]
+    name: build-release
+    runs-on: ${{ matrix.os }}
+    steps:
+      - run: env # Debug
+      - uses: actions/checkout@v6
+      - run: ./.github/gh-actions-runner-xcode-select.sh
+      - run: brew install bash fish xcbeautify swiftly
+      - run: swiftly init --skip-install --assume-yes --verbose && swiftly install
+      - name: './build-release.sh'
         run: |
-          sw_vers -productVersion
-          if sw_vers -productVersion | grep -q "^13"; then # macOS 13
-            true # Xcode 16 is not supported on macOS 13 :(
-          else
-            sudo xcode-select -s "$XCODE_16_DEVELOPER_DIR" # Affects macOS SDK
-          fi
-      - name: Install dependencies
-        run: |
-          set -e
-          echo "Installing dependencies..."
-          brew update
-          brew install bash fish xcbeautify swiftly
-          echo "Dependencies installed successfully"
-      - name: Setup Swift
-        run: |
-          set -e
-          echo "Setting up Swift..."
-          swiftly init --skip-install --assume-yes --verbose
-          swiftly install
-          echo "Swift setup completed"
-      - name: Install project dependencies
-        run: |
-          set -e
-          echo "Installing project dependencies..."
-          ./script/install-dep.sh --all
-          echo "Project dependencies installed"
-      - name: Build debug
-        run: |
-          set -e
-          echo "Building debug version..."
-          ./build-debug.sh
-          echo "Debug build completed"
-      - name: Pre-test validation
-        run: |
-          echo "=== Pre-test validation ==="
-          echo "Swift version:"
-          swift --version
-          echo "Xcode version:"
-          xcode-select -p
-          xcodebuild -version
-          echo "Environment check completed"
-          
-      - name: Run tests
-        run: |
-          set -e
-          echo "Running tests..."
-          ./run-tests.sh
-          echo "All tests passed"
-        # We build release artifacts only on the latest macOS because:
-        # 1. It cuts the build time twice on GH Actions
-        # 2. The latest Xcode version is not available on old macOS, and old Xcode versions bundle too old Swift version
-      - name: './build-release.sh # on macos-15'
-        run: |
-          sw_vers -productVersion
-          if sw_vers -productVersion | grep -q "^15"; then
-            # "-" means "Sign to run locally". There is no aerospace-codesign-certificate on GH Actions
-            ./build-release.sh --codesign-identity -
-            ./install-from-sources.sh --dont-rebuild
-          fi
-      - name: Show build logs on failure
-        if: ${{ failure() }}
-        run: |
-          echo "=== Build failed, showing logs ==="
-          if test -f ./.release/xcodebuild.log; then
-            echo "=== xcodebuild.log ==="
-            cat ./.release/xcodebuild.log
-          fi
-          if test -f ./.debug/build.log; then
-            echo "=== debug build.log ==="
-            cat ./.debug/build.log
-          fi
-          echo "=== Environment info ==="
-          sw_vers
-          xcode-select -p
-          swift --version
+          # "-" means "Sign to run locally". There is no aerospace-codesign-certificate on GH Actions
+          ./build-release.sh --codesign-identity -
+          ./install-from-sources.sh --dont-rebuild
+      - name: cat ./.release/xcodebuild.log
+        if: ${{ always() }}
+        run: 'if test -f ./.release/xcodebuild.log; then cat ./.release/xcodebuild.log; fi'

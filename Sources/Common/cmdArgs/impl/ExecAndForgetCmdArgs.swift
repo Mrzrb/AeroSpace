@@ -1,18 +1,17 @@
 public struct ExecAndForgetCmdArgs: CmdArgs {
-    public var rawArgs: EquatableNoop<[String]> { .init([bashScript]) }
-    public static let parser: CmdParser<Self> = cmdParser(
+    /*conforms*/ public var commonState: CmdArgsCommonState
+    public static let parser: CmdParser<Self> = .init(
         kind: .execAndForget,
         allowInConfig: true,
         help: exec_and_forget_help_generated,
-        options: [:],
-        arguments: [],
+        flags: [:],
+        posArgs: [],
     )
 
     public init(bashScript: String) {
+        self.commonState = .init([bashScript])
         self.bashScript = bashScript
     }
 
     public let bashScript: String
-    /*conforms*/ public var windowId: UInt32?
-    /*conforms*/ public var workspaceName: WorkspaceName?
 }

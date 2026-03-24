@@ -53,18 +53,18 @@ final class MacWindow: Window {
     // }
 
     @MainActor // todo swift is stupid
-    func isWindowHeuristic() async throws -> Bool { // todo cache
-        try await macApp.isWindowHeuristic(windowId)
+    func isWindowHeuristic(_ windowLevel: MacOsWindowLevel? = nil) async throws -> Bool { // todo cache
+        try await macApp.isWindowHeuristic(windowId, windowLevel)
     }
 
     @MainActor // todo swift is stupid
-    func isDialogHeuristic() async throws -> Bool { // todo cache
-        try await macApp.isDialogHeuristic(windowId)
+    func isDialogHeuristic(_ windowLevel: MacOsWindowLevel? = nil) async throws -> Bool { // todo cache
+        try await macApp.isDialogHeuristic(windowId, windowLevel)
     }
 
     @MainActor
-    func getAxUiElementWindowType() async throws -> AxUiElementWindowType {
-        try await macApp.getAxUiElementWindowType(windowId)
+    func getAxUiElementWindowType(_ windowLevel: MacOsWindowLevel? = nil) async throws -> AxUiElementWindowType {
+        try await macApp.getAxUiElementWindowType(windowId, windowLevel)
     }
 
     @MainActor // todo swift is stupid
@@ -166,11 +166,13 @@ final class MacWindow: Window {
             // Tiling windows should be unhidden with layoutRecursive anyway
             case .floatingWindow:
                 let workspaceRect = nodeWorkspace.workspaceMonitor.rect
-                let pointInsideWorkspace = CGPoint(
-                    x: workspaceRect.width * prevUnhiddenProportionalPositionInsideWorkspaceRect.x,
-                    y: workspaceRect.height * prevUnhiddenProportionalPositionInsideWorkspaceRect.y,
-                )
-                setAxTopLeftCornerImmediate(workspaceRect.topLeftCorner + pointInsideWorkspace)
+                var newX = workspaceRect.topLeftX + workspaceRect.width * prevUnhiddenProportionalPositionInsideWorkspaceRect.x
+                var newY = workspaceRect.topLeftY + workspaceRect.height * prevUnhiddenProportionalPositionInsideWorkspaceRect.y
+                let windowWidth = lastFloatingSize?.width ?? 0
+                let windowHeight = lastFloatingSize?.height ?? 0
+                newX = newX.coerce(in: workspaceRect.minX ... max(workspaceRect.minX, workspaceRect.maxX - windowWidth))
+                newY = newY.coerce(in: workspaceRect.minY ... max(workspaceRect.minY, workspaceRect.maxY - windowHeight))
+                setAxFrameImmediate(CGPoint(x: newX, y: newY), nil)
             case .macosNativeFullscreenWindow, .macosNativeHiddenAppWindow, .macosNativeMinimizedWindow,
                  .macosPopupWindow, .tiling, .rootTilingContainer, .shimContainerRelation: break
         }
@@ -311,10 +313,12 @@ final class MacWindow: Window {
         macApp.setAxAlpha(windowId, alpha)
     }
 
+    @MainActor
     override func getAxTopLeftCorner() async throws -> CGPoint? {
         try await macApp.getAxTopLeftCorner(windowId)
     }
 
+    @MainActor
     override func getAxRect() async throws -> Rect? {
         try await macApp.getAxRect(windowId)
     }
@@ -333,7 +337,7 @@ extension Window {
 // The function is private because it's unsafe. It leaves the window in unbound state
 @MainActor // todo swift is stupid
 private func unbindAndGetBindingDataForNewWindow(_ windowId: UInt32, _ macApp: MacApp, _ workspace: Workspace, window: Window?) async throws -> BindingData {
-    switch try await macApp.getAxUiElementWindowType(windowId) {
+    switch try await macApp.getAxUiElementWindowType(windowId, getWindowLevel(for: windowId)) {
         case .popup: BindingData(parent: macosPopupWindowsContainer, adaptiveWeight: WEIGHT_AUTO, index: INDEX_BIND_LAST)
         case .dialog: BindingData(parent: workspace, adaptiveWeight: WEIGHT_AUTO, index: INDEX_BIND_LAST)
         case .window: unbindAndGetBindingDataForNewTilingWindow(workspace, window: window)
@@ -398,7 +402,7 @@ extension WindowDetectedCallback {
         if let regex = matcher.windowTitleRegexSubstring, !(try await window.title).contains(regex) {
             return false
         }
-        if let appId = matcher.appId, appId != window.app.bundleId {
+        if let appId = matcher.appId, appId != window.app.rawAppBundleId {
             return false
         }
         if let regex = matcher.appNameRegexSubstring, !(window.app.name ?? "").contains(regex) {

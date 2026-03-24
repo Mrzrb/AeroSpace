@@ -1,5 +1,5 @@
 // FILE IS GENERATED FROM docs/aerospace-*.adoc files
-// TO REGENERATE THE FILE RUN generate.sh --all
+// TO REGENERATE THE FILE RUN generate.sh
 
 let balance_sizes_help_generated = """
     USAGE: balance-sizes [-h|--help] [--workspace <workspace>]
@@ -39,10 +39,10 @@ let focus_monitor_help_generated = """
        OR: focus-monitor [-h|--help] <monitor-pattern>...
     """
 let focus_help_generated = """
-    USAGE: focus [-h|--help] [--ignore-floating]
+    USAGE: focus [-h|--help] [--ignore-floating] [--wrap-around]
                  [--boundaries <boundary>] [--boundaries-action <action>]
                  (left|down|up|right)
-       OR: focus [-h|--help] [--ignore-floating]
+       OR: focus [-h|--help] [--ignore-floating] [--wrap-around]
                  [--boundaries <boundary>] [--boundaries-action <action>]
                  (dfs-next|dfs-prev)
        OR: focus [-h|--help] --window-id <window-id>
@@ -107,6 +107,7 @@ let move_node_to_monitor_help_generated = """
     """
 let move_node_to_workspace_help_generated = """
     USAGE: move-node-to-workspace [-h|--help] [--focus-follows-window] [--wrap-around]
+                                  [--stdin|--no-stdin]
                                   (next|prev)
        OR: move-node-to-workspace [-h|--help] [--focus-follows-window] [--fail-if-noop]
                                   [--window-id <window-id>] <workspace-name>
@@ -128,6 +129,9 @@ let resize_help_generated = """
 let split_help_generated = """
     USAGE: split [-h|--help] [--window-id <window-id>] (horizontal|vertical|opposite)
     """
+let subscribe_help_generated = """
+    USAGE: subscribe [-h|--help] [--all] [--no-send-initial] [<event>...]
+    """
 let summon_workspace_help_generated = """
     USAGE: summon-workspace [-h|--help] [--fail-if-noop] <workspace>
     """
@@ -140,14 +144,14 @@ let trigger_binding_help_generated = """
     USAGE: trigger-binding [-h|--help] <binding> --mode <mode-id>
     """
 let volume_help_generated = """
-    USAGE: volume [-h|--help] (up|down)
-       OR: volume [-h|--help] (mute-toggle|mute-off|mute-on)
-       OR: volume [-h|--help] set <number>
+    USAGE: volume [-h|--help] (up|down) [--no-gui]
+       OR: volume [-h|--help] (mute-toggle|mute-off|mute-on) [--no-gui]
+       OR: volume [-h|--help] set <number> [--no-gui]
     """
 let workspace_back_and_forth_help_generated = """
     USAGE: workspace-back-and-forth [-h|--help]
     """
 let workspace_help_generated = """
     USAGE: workspace [-h|--help] [--auto-back-and-forth] [--fail-if-noop] <workspace-name>
-       OR: workspace [-h|--help] [--wrap-around] (next|prev)
+       OR: workspace [-h|--help] [--wrap-around] [--stdin|--no-stdin] (next|prev)
     """

@@ -1,16 +1,36 @@
 import AppKit
 
-// Covered by tests in ./axDumps in the repor root
+enum AxUiElementWindowType: String {
+    case window
+    case dialog
+    /// Not even a real window
+    case popup
+
+    static func new(isWindow: Bool, isDialog: () -> Bool) -> AxUiElementWindowType {
+        switch true {
+            case !isWindow: .popup
+            case isDialog(): .dialog
+            default: .window
+        }
+    }
+}
+
+// Covered by tests in ./axDumps in the repo root
 extension AxUiElementMock {
     // 'isDialogHeuristic' function name is referenced in the guide
-    func isDialogHeuristic(appBundleId id: String?) -> Bool {
+    func isDialogHeuristic(
+        _ id: KnownBundleId?,
+        _ windowLevel: MacOsWindowLevel?,
+    ) -> Bool {
         // Note: a lot of windows don't have title on startup. So please don't rely on the title
 
-        if id == "com.apple.iphonesimulator" {
+        if id == ._1password && windowLevel != .normalWindow {
             return true
         }
 
-        lazy var isQutebrowser = id == "org.qutebrowser.qutebrowser"
+        if id == .iphonesimulator {
+            return true
+        }
 
         // Don't tile:
         // - Chrome cmd+f window ("AXUnknown" value)
@@ -21,17 +41,17 @@ extension AxUiElementMock {
         //
         // Minimized windows or windows of a hidden app have subrole "AXDialog"
         if get(Ax.subroleAttr) != kAXStandardWindowSubrole &&
-            !isQutebrowser // qutebrowser regular window has AXDialog subrole when decorations are disabled
+            id != .qutebrowser // qutebrowser regular window has AXDialog subrole when decorations are disabled
         {
             return true
         }
         // Firefox: Picture in Picture window doesn't have minimize button.
         // todo. bug: when firefox shows non-native fullscreen, minimize button is disabled for all other non-fullscreen windows
-        if id?.isFirefoxId() == true && get(Ax.minimizeButtonAttr)?.get(Ax.enabledAttr) != true {
+        if id?.isFirefox == true && get(Ax.minimizeButtonAttr)?.get(Ax.enabledAttr) != true {
             return true
         }
-        if id == "com.apple.PhotoBooth" { return true }
-        if id == "com.mitchellh.ghostty" {
+        if id == .photoBooth { return true }
+        if id == .ghostty {
             return get(Ax.fullscreenButtonAttr)?.get(Ax.enabledAttr) != true &&
                 get(Ax.closeButtonAttr)?.get(Ax.enabledAttr) == true
         }
@@ -48,16 +68,25 @@ extension AxUiElementMock {
         // - flameshot? https://github.com/nikitabobko/AeroSpace/issues/112
         // - Drata Agent https://github.com/nikitabobko/AeroSpace/issues/134
         if get(Ax.fullscreenButtonAttr)?.get(Ax.enabledAttr) != true &&
-            id != "org.gimp.gimp-2.10" && // Gimp doesn't show fullscreen button
-            id != "com.apple.ActivityMonitor" && // Activity Monitor doesn't show fullscreen button
+            id != .gimp && // Gimp doesn't show fullscreen button
+
+            // "Drag out" a tab out of Chrome window. Technically, it shouldn't be necessary, but
+            // apparently there is some sort of race condition between users releasing mouse up and
+            // Chrome reactivating the fullscreen button
+            // todo: consider checking for fullscreen cirteria periodically (downside: will affect performance)
+            id != .chrome &&
+
+            id != .activityMonitor && // Activity Monitor doesn't show fullscreen button
 
             // Terminal apps and Emacs have an option to hide their title bars
-            id != "org.alacritty" && // ~/.alacritty.toml: window.decorations = "Buttonless"
-            id != "net.kovidgoyal.kitty" && // ~/.config/kitty/kitty.conf: hide_window_decorations titlebar-and-corners
-            id != "com.github.wez.wezterm" &&
-            !isQutebrowser && // :set window.hide_decoration
-            id != "com.googlecode.iterm2" &&
-            id != "org.gnu.Emacs"
+            id != .alacritty && // ~/.alacritty.toml: window.decorations = "Buttonless"
+            id != .kitty && // ~/.config/kitty/kitty.conf: hide_window_decorations titlebar-and-corners
+            id != .wezterm &&
+            id != .qutebrowser && // :set window.hide_decoration
+            id != .iterm2 &&
+            id != .emacs &&
+            id?.isVscode != true && // "window.nativeFullScreen": false
+            id != .steam
         {
             return true
         }
@@ -71,23 +100,41 @@ extension AxUiElementMock {
     /// - It's annoying that the focus command treats these popups as floating windows
     func isWindowHeuristic(
         axApp: AxUiElementMock,
-        appBundleId: String?,
+        _ id: KnownBundleId?,
         _ activationPolicy: NSApplication.ActivationPolicy,
+        _ windowLevel: MacOsWindowLevel?,
     ) -> Bool {
+        if windowLevel != .normalWindow &&
+            // Slowly roll out windowLevel for applications for which we have the appropriate dumps
+            (id == .slack || id == .chrome || id?.isFirefox == true || id == .braveBrowser || id == .screenstudio || id == .cleanshotx || id == .iterm2)
+        {
+            return false
+        }
+
         // Just don't do anything with "Ghostty Quick Terminal" windows.
         // Its position and size are managed by the Ghostty itself
         // https://github.com/nikitabobko/AeroSpace/issues/103
         // https://github.com/ghostty-org/ghostty/discussions/3512
-        if appBundleId == "com.mitchellh.ghostty" && get(Ax.identifierAttr) == "com.mitchellh.ghostty.quickTerminal" {
+        if id == .ghostty && get(Ax.identifierAttr) == "com.mitchellh.ghostty.quickTerminal" {
             return false
         }
 
-        if activationPolicy == .accessory && get(Ax.closeButtonAttr) == nil {
+        lazy var fullscreenButton = get(Ax.fullscreenButtonAttr)
+
+        if id == .xcode && get(Ax.identifierAttr) == "open_quickly" {
             return false
         }
 
-        if appBundleId?.isFirefoxId() != true {
-            return isWindowHeuristicOld(axApp: axApp, appBundleId: appBundleId)
+        if id == .iterm2 && fullscreenButton == nil {
+            return false
+        }
+
+        if activationPolicy == .accessory && get(Ax.closeButtonAttr) == nil && id != .steam {
+            return false
+        }
+
+        if id?.isFirefox != true {
+            return isWindowHeuristicOld(axApp: axApp, id)
         }
 
         // Try to filter out incredibly weird popup like AXWindows without any buttons.
@@ -104,7 +151,7 @@ extension AxUiElementMock {
         // - Finder preview (hit space) (subrole == "Quick Look")
         // - Firefox non-native video fullscreen (about:config -> full-screen-api.macos-native-full-screen -> false, subrole == AXUnknown)
         return get(Ax.closeButtonAttr) != nil ||
-            get(Ax.fullscreenButtonAttr) != nil ||
+            fullscreenButton != nil ||
             get(Ax.zoomButtonAttr) != nil ||
             get(Ax.minimizeButtonAttr) != nil ||
 
@@ -115,7 +162,7 @@ extension AxUiElementMock {
             get(Ax.subroleAttr) == kAXStandardWindowSubrole
     }
 
-    private func isWindowHeuristicOld(axApp: AxUiElementMock, appBundleId: String?) -> Bool { // 0.18.3 hotfix
+    private func isWindowHeuristicOld(axApp: AxUiElementMock, _ id: KnownBundleId?) -> Bool { // 0.18.3 hotfix
         lazy var subrole = get(Ax.subroleAttr)
         lazy var title = get(Ax.titleAttr) ?? ""
 
@@ -142,38 +189,18 @@ extension AxUiElementMock {
         return subrole == kAXStandardWindowSubrole ||
             subrole == kAXDialogSubrole || // macOS native file picker ("Open..." menu) (kAXDialogSubrole value)
             subrole == kAXFloatingWindowSubrole || // telegram image viewer
-            appBundleId == "com.apple.finder" && subrole == "Quick Look" // Finder preview (hit space) is a floating window
+            id == .finder && subrole == "Quick Look" // Finder preview (hit space) is a floating window
     }
 
     func getWindowType(
         axApp: AxUiElementMock,
-        appBundleId: String?,
+        _ id: KnownBundleId?,
         _ activationPolicy: NSApplication.ActivationPolicy,
+        _ windowLevel: MacOsWindowLevel?,
     ) -> AxUiElementWindowType {
         .new(
-            isWindow: isWindowHeuristic(axApp: axApp, appBundleId: appBundleId, activationPolicy),
-            isDialog: { isDialogHeuristic(appBundleId: appBundleId) },
+            isWindow: isWindowHeuristic(axApp: axApp, id, activationPolicy, windowLevel),
+            isDialog: { isDialogHeuristic(id, windowLevel) },
         )
-    }
-}
-
-enum AxUiElementWindowType: String {
-    case window
-    case dialog
-    /// Not even a real window
-    case popup
-
-    static func new(isWindow: Bool, isDialog: () -> Bool) -> AxUiElementWindowType {
-        switch true {
-            case !isWindow: .popup
-            case isDialog(): .dialog
-            default: .window
-        }
-    }
-}
-
-extension String {
-    fileprivate func isFirefoxId() -> Bool {
-        ["org.mozilla.firefox", "org.mozilla.firefoxdeveloperedition", "org.mozilla.nightly"].contains(self)
     }
 }

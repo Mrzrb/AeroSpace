@@ -1,4 +1,12 @@
 extension Result {
+    public init(catching body: () async throws(Failure) -> Success) async {
+        do {
+            self = .success(try await body())
+        } catch {
+            self = .failure(error)
+        }
+    }
+
     public func getOrNil(appendErrorTo errors: inout [Failure]) -> Success? {
         switch self {
             case .success(let success):
@@ -17,13 +25,6 @@ extension Result {
         return switch self {
             case .success(let success): success
             case .failure: nil
-        }
-    }
-
-    public func getOrNils() -> (Success?, Failure?) {
-        return switch self {
-            case .success(let success): (success, nil)
-            case .failure(let failure): (nil, failure)
         }
     }
 
@@ -46,7 +47,7 @@ extension Result {
     @discardableResult
     public func getOrDie(
         _ msgPrefix: String = "",
-        file: String = #fileID,
+        file: StaticString = #fileID,
         line: Int = #line,
         column: Int = #column,
         function: String = #function,

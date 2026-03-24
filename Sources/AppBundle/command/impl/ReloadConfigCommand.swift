@@ -3,11 +3,11 @@ import Common
 
 struct ReloadConfigCommand: Command {
     let args: ReloadConfigCmdArgs
-    /*conforms*/ var shouldResetClosedWindowsCache = false
+    /*conforms*/ let shouldResetClosedWindowsCache = false
 
-    func run(_ env: CmdEnv, _ io: CmdIo) -> Bool {
+    func run(_ env: CmdEnv, _ io: CmdIo) async throws -> Bool {
         var stdout = ""
-        let isOk = reloadConfig(args: args, stdout: &stdout)
+        let isOk = try await reloadConfig(args: args, stdout: &stdout)
         if !stdout.isEmpty {
             io.out(stdout)
         }
@@ -15,30 +15,31 @@ struct ReloadConfigCommand: Command {
     }
 }
 
-@MainActor func reloadConfig(forceConfigUrl: URL? = nil) -> Bool {
+@MainActor func reloadConfig(forceConfigUrl: URL? = nil) async throws -> Bool {
     var devNull = ""
-    return reloadConfig(forceConfigUrl: forceConfigUrl, stdout: &devNull)
+    return try await reloadConfig(forceConfigUrl: forceConfigUrl, stdout: &devNull)
 }
 
 @MainActor func reloadConfig(
     args: ReloadConfigCmdArgs = ReloadConfigCmdArgs(rawArgs: []),
     forceConfigUrl: URL? = nil,
     stdout: inout String,
-) -> Bool {
+) async throws -> Bool {
+    let result: Bool
     switch readConfig(forceConfigUrl: forceConfigUrl) {
         case .success(let (parsedConfig, url)):
             if !args.dryRun {
                 resetHotKeys()
                 config = parsedConfig
                 configUrl = url
-                activateMode(activeMode)
+                try await activateMode(activeMode)
                 syncStartAtLogin()
                 MessageModel.shared.message = nil
 
                 // Update animation engine with new configuration
                 WindowAnimationEngine.shared.updateConfiguration(parsedConfig.animation)
             }
-            return true
+            result = true
         case .failure(let msg):
             stdout.append(msg)
             if !args.noGui {
@@ -46,6 +47,10 @@ struct ReloadConfigCommand: Command {
                     MessageModel.shared.message = Message(description: "AeroSpace Config Error", body: msg)
                 }
             }
-            return false
+            result = false
     }
+    if !args.dryRun {
+        syncConfigFileWatcher()
+    }
+    return result
 }

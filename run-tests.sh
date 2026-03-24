@@ -2,7 +2,9 @@
 cd "$(dirname "$0")"
 source ./script/setup.sh
 
-./build-debug.sh
+./script/check-uncommitted-files.sh
+
+./build-debug.sh -Xswiftc -warnings-as-errors
 ./run-swift-test.sh
 
 ./.debug/aerospace -h > /dev/null
@@ -10,8 +12,9 @@ source ./script/setup.sh
 ./.debug/aerospace -v | grep -q "0.0.0-SNAPSHOT SNAPSHOT"
 ./.debug/aerospace --version | grep -q "0.0.0-SNAPSHOT SNAPSHOT"
 
-./format.sh
-./generate.sh --all
+./lint.sh --check-uncommitted-files
+./generate.sh
+./script/check-uncommitted-files.sh
 
 echo
-echo "All tests have passed successfully"
+echo "✅ All tests have passed successfully"

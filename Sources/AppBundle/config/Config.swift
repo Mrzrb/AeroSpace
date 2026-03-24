@@ -1,6 +1,7 @@
 import AppKit
 import Common
 import HotKey
+import OrderedCollections
 
 func getDefaultConfigUrlFromProject() -> URL {
     var url = URL(filePath: #filePath)
@@ -22,13 +23,13 @@ var defaultConfigUrl: URL {
     }
 }
 @MainActor let defaultConfig: Config = {
-    guard let configContent = try? String(contentsOf: defaultConfigUrl) else {
-        return Config() // Return default config if file can't be read
+    guard let configContent = try? String(contentsOf: defaultConfigUrl, encoding: .utf8) else {
+        return Config()
     }
     let parsedConfig = parseConfig(configContent)
     if !parsedConfig.errors.isEmpty {
         print("Warning: Can't parse default config: \(parsedConfig.errors)")
-        return Config() // Return default config if parsing fails
+        return Config()
     }
     return parsedConfig.config
 }()
@@ -36,6 +37,7 @@ var defaultConfigUrl: URL {
 @MainActor var configUrl: URL = defaultConfigUrl
 
 struct Config: ConvenienceCopyable {
+    var configVersion: Int = 1
     var afterLoginCommand: [any Command] = []
     var afterStartupCommand: [any Command] = []
     var _indentForNestedContainersWithTheSameOrientation: Void = ()
@@ -44,9 +46,11 @@ struct Config: ConvenienceCopyable {
     var defaultRootContainerLayout: Layout = .tiles
     var defaultRootContainerOrientation: DefaultContainerOrientation = .auto
     var startAtLogin: Bool = false
+    var autoReloadConfig: Bool = false
     var automaticallyUnhideMacosHiddenApps: Bool = false
     var accordionPadding: Int = 30
     var enableNormalizationOppositeOrientationForNestedContainers: Bool = true
+    var persistentWorkspaces: OrderedSet<String> = []
     var execOnWorkspaceChange: [String] = [] // todo deprecate
     var keyMapping = KeyMapping()
     var execConfig: ExecConfig = ExecConfig()
@@ -54,13 +58,13 @@ struct Config: ConvenienceCopyable {
     var onFocusChanged: [any Command] = []
     // var onFocusedWorkspaceChanged: [any Command] = []
     var onFocusedMonitorChanged: [any Command] = []
+    var onModeChanged: [any Command] = []
 
     var gaps: Gaps = .zero
     var workspaceToMonitorForceAssignment: [String: [MonitorDescription]] = [:]
     var modes: [String: Mode] = [:]
     var onWindowDetected: [WindowDetectedCallback] = []
 
-    var preservedWorkspaceNames: [String] = []
     var bsp: BSPConfig = BSPConfig()
     var animation: AnimationConfig = AnimationConfig()
     var visualEffects: VisualEffectsConfig = VisualEffectsConfig()

@@ -1,8 +1,8 @@
 import AppKit
 import Common
 
-class Window: TreeNode, Hashable {
-    nonisolated let windowId: UInt32 // todo nonisolated keyword is no longer necessary?
+open class Window: TreeNode, Hashable {
+    let windowId: UInt32
     let app: any AbstractApp
     var lastFloatingSize: CGSize?
     var isFullscreen: Bool = false
@@ -26,12 +26,10 @@ class Window: TreeNode, Hashable {
     @MainActor
     func closeAxWindow() { die("Not implemented") }
 
-    nonisolated func hash(into hasher: inout Hasher) {
+    public func hash(into hasher: inout Hasher) {
         hasher.combine(windowId)
     }
 
-    @MainActor // todo can be dropped in future Swift versions?
-    func getAxTopLeftCorner() async throws -> CGPoint? { die("Not implemented") }
     @MainActor // todo swift is stupid
     func getAxSize() async throws -> CGSize? { die("Not implemented") }
     @MainActor // todo swift is stupid
@@ -39,7 +37,7 @@ class Window: TreeNode, Hashable {
     @MainActor // todo swift is stupid
     var isMacosFullscreen: Bool { get async throws { false } }
     @MainActor // todo swift is stupid
-    var isMacosMinimized: Bool { get async throws { false } } // todo replace with enum MacOsWindowNativeState { normal, fullscreen, invisible }
+    var isMacosMinimized: Bool { get async throws { false } }
     var isHiddenInCorner: Bool { die("Not implemented") }
     @MainActor
     func nativeFocus() { die("Not implemented") }
@@ -47,13 +45,14 @@ class Window: TreeNode, Hashable {
     func getAxRect() async throws -> Rect? { die("Not implemented") }
     @MainActor // todo can be dropped in future Swift versions
     func getCenter() async throws -> CGPoint? { try await getAxRect()?.center }
+    @MainActor // todo can be dropped in future Swift versions
+    func getAxTopLeftCorner() async throws -> CGPoint? { try await getAxRect()?.topLeftCorner }
 
     @MainActor func setAxTopLeftCorner(_ point: CGPoint) { die("Not implemented") }
-    func setAxFrameBlocking(_ topLeft: CGPoint?, _ size: CGSize?) async throws { die("Not implemented") }
     @MainActor func setAxFrame(_ topLeft: CGPoint?, _ size: CGSize?) { die("Not implemented") }
+    func setAxFrameBlocking(_ topLeft: CGPoint?, _ size: CGSize?) async throws { die("Not implemented") }
     @MainActor func setSizeAsync(_ size: CGSize) { die("Not implemented") }
 
-    // Animation bypass methods for immediate updates
     @MainActor func setAxTopLeftCornerImmediate(_ point: CGPoint) { die("Not implemented") }
     @MainActor func setAxFrameImmediate(_ topLeft: CGPoint?, _ size: CGSize?) { die("Not implemented") }
     @MainActor func setSizeAsyncImmediate(_ size: CGSize) { die("Not implemented") }
@@ -62,12 +61,11 @@ class Window: TreeNode, Hashable {
 
 enum LayoutReason: Equatable {
     case standard
-    /// Reason for the cur temp layout is macOS native fullscreen, minimize, or hide
     case macos(prevParentKind: NonLeafTreeNodeKind)
 }
 
 extension Window {
-    var isFloating: Bool { parent is Workspace } // todo drop. It will be a source of bugs when sticky is introduced
+    var isFloating: Bool { parent is Workspace }
 
     @discardableResult
     @MainActor

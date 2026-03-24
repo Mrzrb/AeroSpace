@@ -3,26 +3,35 @@ import Common
 import Foundation
 
 @MainActor public func initAppBundle() {
-    initTerminationHandler()
-    isCli = false
-    initServerArgs()
-    if isDebug {
-        sendCommandToReleaseServer(args: ["enable", "off"])
-        interceptTermination(SIGINT)
-        interceptTermination(SIGKILL)
-    }
-    if !reloadConfig() {
-        check(reloadConfig(forceConfigUrl: defaultConfigUrl))
-    }
-
-    checkAccessibilityPermissions()
-    startUnixSocketServer()
-    GlobalObserver.initObserver()
     Task {
+        initTerminationHandler()
+        isCli = false
+        initServerArgs()
+        if isDebug {
+            await toggleReleaseServerIfDebug(.off)
+            interceptTermination(SIGINT)
+            interceptTermination(SIGKILL)
+        }
+        if try await !reloadConfig() {
+            var out = ""
+            check(
+                try await reloadConfig(forceConfigUrl: defaultConfigUrl, stdout: &out),
+                """
+                Can't load default config. Your installation is probably corrupted.
+                Please don't modify '\(defaultConfigUrl)'
+
+                \(out)
+                """,
+            )
+        }
+
+        checkAccessibilityPermissions()
+        startUnixSocketServer()
+        GlobalObserver.initObserver()
         Workspace.garbageCollectUnusedWorkspaces() // init workspaces
         _ = Workspace.all.first?.focusWorkspace()
         try await runRefreshSessionBlocking(.startup, layoutWorkspaces: false)
-        try await runSession(.startup, .checkServerIsEnabledOrDie) {
+        try await runLightSession(.startup, .forceRun) {
             smartLayoutAtStartup()
             _ = try await config.afterStartupCommand.runCmdSeq(.defaultEnv, .emptyStdin)
         }
@@ -46,6 +55,7 @@ var isStartup: Bool { _isStartup ?? dieT("isStartup is not initialized") }
 
 struct ServerArgs: Sendable {
     var configLocation: String? = nil
+    var isReadOnly: Bool = false
 }
 
 private let serverHelp = """
@@ -56,36 +66,42 @@ private let serverHelp = """
       -v, --version           Print AeroSpace.app version
       --config-path <path>    Config path. It will take priority over ~/.aerospace.toml
                               and ${XDG_CONFIG_HOME}/aerospace/aerospace.toml
+      --read-only             Disable window management.
+                              Useful if you want to use only debug-windows or other query commands.
     """
 
-private nonisolated(unsafe) var _serverArgs = ServerArgs()
+nonisolated(unsafe) private var _serverArgs = ServerArgs()
 var serverArgs: ServerArgs { _serverArgs }
 private func initServerArgs() {
-    var args: [String] = Array(CommandLine.arguments.dropFirst())
+    let args = CommandLine.arguments.slice(1...) ?? []
     if args.contains(where: { $0 == "-h" || $0 == "--help" }) {
-        print(serverHelp)
-        exit(0)
+        exit(0, out: serverHelp)
     }
-    while !args.isEmpty {
-        switch args.first {
+    var index = 0
+    while index < args.count {
+        let current = args[index]
+        index += 1
+        switch current {
             case "--version", "-v":
-                print("\(aeroSpaceAppVersion) \(gitHash)")
-                exit(0)
+                exit(0, out: "\(aeroSpaceAppVersion) \(gitHash)")
             case "--config-path":
-                if let arg = args.getOrNil(atIndex: 1) {
+                if let arg = args.getOrNil(atIndex: index) {
                     _serverArgs.configLocation = arg
                 } else {
-                    cliError("Missing <path> in --config-path flag")
+                    exit(1, err: "Missing <path> in --config-path flag")
                 }
-                args = Array(args.dropFirst(2))
+                index += 1
+            case "--read-only": // todo rename to '--disabled' and unite with disabled feature
+                _serverArgs.isReadOnly = true
             case "-NSDocumentRevisionsDebugMode" where isDebug:
-                printStderr("Running from Xcode. Skip args parsing... The args were: \(CommandLine.arguments.dropFirst())")
-                return
+                // Skip Xcode CLI args.
+                // Usually it's '-NSDocumentRevisionsDebugMode NO'/'-NSDocumentRevisionsDebugMode YES'
+                while args.getOrNil(atIndex: index)?.starts(with: "-") == false { index += 1 }
             default:
-                cliError("Unrecognized flag '\(args.first.orDie())'")
+                exit(1, err: "Unrecognized flag '\(args.first.orDie())'")
         }
     }
     if let path = serverArgs.configLocation, !FileManager.default.fileExists(atPath: path) {
-        cliError("\(path) doesn't exist")
+        exit(1, err: "\(path) doesn't exist")
     }
 }

@@ -114,7 +114,7 @@ private let moveOutMacosUnconventionalWindow = "moving macOS fullscreen, minimiz
     guard let parent = innerMostChild.parent else { return false }
 
     let result: Bool
-    switch parent.nodeCases {
+    switch parent.cases {
         case .tilingContainer(let parent):
             check(parent.orientation == direction.orientation)
             guard let ownIndex = innerMostChild.ownIndex else { return false }
@@ -161,8 +161,6 @@ private let moveOutMacosUnconventionalWindow = "moving macOS fullscreen, minimiz
             return io.err(moveOutMacosUnconventionalWindow)
         case .macosPopupWindowsContainer:
             return false // Impossible
-        case .window:
-            die("Window can't contain children nodes")
     }
 
     // Apply BSP optimization after successful move

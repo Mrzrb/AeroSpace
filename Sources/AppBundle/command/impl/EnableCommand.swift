@@ -3,7 +3,7 @@ import Common
 
 struct EnableCommand: Command {
     let args: EnableCmdArgs
-    /*conforms*/ var shouldResetClosedWindowsCache = false
+    /*conforms*/ let shouldResetClosedWindowsCache = false
 
     func run(_ env: CmdEnv, _ io: CmdIo) async throws -> Bool {
         let prevState = TrayMenuModel.shared.isEnabled
@@ -13,8 +13,10 @@ struct EnableCommand: Command {
             case .toggle: !TrayMenuModel.shared.isEnabled
         }
         if newState == prevState {
-            io.out((newState ? "Already enabled" : "Already disabled") +
-                "Tip: use --fail-if-noop to exit with non-zero code")
+            if !args.failIfNoop {
+                io.out((newState ? "Already enabled" : "Already disabled") +
+                    "Tip: use --fail-if-noop to exit with non-zero code")
+            }
             return !args.failIfNoop
         }
 
@@ -25,9 +27,9 @@ struct EnableCommand: Command {
                     window.lastFloatingSize = try await window.getAxSize() ?? window.lastFloatingSize
                 }
             }
-            activateMode(mainModeId)
+            try await activateMode(mainModeId)
         } else {
-            activateMode(nil)
+            try await activateMode(nil)
         }
         return true
     }

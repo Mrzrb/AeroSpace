@@ -27,13 +27,17 @@ extension HotKey {
 }
 
 @MainActor var activeMode: String? = mainModeId
-@MainActor func activateMode(_ targetMode: String?) {
+@MainActor func activateMode(_ targetMode: String?) async throws {
     let targetBindings = targetMode.flatMap { config.modes[$0] }?.bindings ?? [:]
     for binding in targetBindings.values where !hotkeys.keys.contains(binding.descriptionWithKeyCode) {
         hotkeys[binding.descriptionWithKeyCode] = HotKey(key: binding.keyCode, modifiers: binding.modifiers, keyDownHandler: {
             Task {
                 if let activeMode {
-                    try await runSession(.hotkeyBinding, .checkServerIsEnabledOrDie) { () throws in
+                    broadcastEvent(.bindingTriggered(
+                        mode: activeMode,
+                        binding: binding.descriptionWithKeyNotation,
+                    ))
+                    try await runLightSession(.hotkeyBinding, .checkServerIsEnabledOrDie()) { () throws in
                         _ = try await config.modes[activeMode]?.bindings[binding.descriptionWithKeyCode]?.commands
                             .runCmdSeq(.defaultEnv, .emptyStdin)
                     }
@@ -48,7 +52,17 @@ extension HotKey {
             key.isEnabled = false
         }
     }
+    let oldMode = activeMode
     activeMode = targetMode
+    if oldMode != targetMode {
+        broadcastEvent(.modeChanged(mode: targetMode))
+        if !config.onModeChanged.isEmpty {
+            guard let token: RunSessionGuard = .isServerEnabled else { return }
+            try await runLightSession(.onModeChanged, token) {
+                _ = try await config.onModeChanged.runCmdSeq(.defaultEnv, .emptyStdin)
+            }
+        }
+    }
 }
 
 struct HotkeyBinding: Equatable, Sendable {

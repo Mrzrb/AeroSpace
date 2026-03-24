@@ -3,7 +3,7 @@ import Common
 
 final class TestApp: AbstractApp {
     let pid: Int32
-    let bundleId: String?
+    let rawAppBundleId: String?
     let name: String?
     let execPath: String? = nil
     let bundlePath: String? = nil
@@ -12,8 +12,8 @@ final class TestApp: AbstractApp {
 
     private init() {
         self.pid = 0
-        self.bundleId = "bobko.AeroSpace.test-app"
-        self.name = bundleId
+        self.rawAppBundleId = "bobko.AeroSpace.test-app"
+        self.name = rawAppBundleId
     }
 
     var _windows: [Window] = []
@@ -25,9 +25,6 @@ final class TestApp: AbstractApp {
             }
             _windows = newValue
         }
-    }
-    @MainActor func detectNewWindowsAndGetIds() async throws -> [UInt32] {
-        return windows.map { $0.windowId }
     }
 
     private var _focusedWindow: Window? = nil

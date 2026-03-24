@@ -83,27 +83,31 @@ extension Window {
     @MainActor // todo can be dropped in future Swift versions?
     fileprivate func layoutFloatingWindow(_ context: LayoutContext) async throws {
         let workspace = context.workspace
-        let currentMonitor = try await getCenter()?.monitorApproximation // Probably not idempotent
-        if let currentMonitor, let windowTopLeftCorner = try await getAxTopLeftCorner(), workspace != currentMonitor.activeWorkspace {
+        let windowRect = try await getAxRect() // Probably not idempotent
+        let currentMonitor = windowRect?.center.monitorApproximation
+        if let currentMonitor, let windowRect, workspace != currentMonitor.activeWorkspace {
+            let windowTopLeftCorner = windowRect.topLeftCorner
             let xProportion = (windowTopLeftCorner.x - currentMonitor.visibleRect.topLeftX) / currentMonitor.visibleRect.width
             let yProportion = (windowTopLeftCorner.y - currentMonitor.visibleRect.topLeftY) / currentMonitor.visibleRect.height
 
-            let moveTo = workspace.workspaceMonitor
-            let newPosition = CGPoint(
-                x: moveTo.visibleRect.topLeftX + xProportion * moveTo.visibleRect.width,
-                y: moveTo.visibleRect.topLeftY + yProportion * moveTo.visibleRect.height,
-            )
+            let workspaceRect = workspace.workspaceMonitor.visibleRect
+            var newX = workspaceRect.topLeftX + xProportion * workspaceRect.width
+            var newY = workspaceRect.topLeftY + yProportion * workspaceRect.height
 
-            // Use animation for floating window movement if enabled
+            let windowWidth = windowRect.width
+            let windowHeight = windowRect.height
+            newX = newX.coerce(in: workspaceRect.minX ... max(workspaceRect.minX, workspaceRect.maxX - windowWidth))
+            newY = newY.coerce(in: workspaceRect.minY ... max(workspaceRect.minY, workspaceRect.maxY - windowHeight))
+            let newPosition = CGPoint(x: newX, y: newY)
+
             if config.animation.enabled && config.animation.workspaceTransitionAnimationEnabled {
                 do {
                     try await WindowAnimationEngine.shared.animateWindowPosition(self, to: newPosition)
                 } catch {
-                    // Fallback to immediate positioning if animation fails
                     setAxTopLeftCornerImmediate(newPosition)
                 }
             } else {
-                setAxTopLeftCorner(newPosition)
+                setAxFrame(newPosition, nil)
             }
         }
         if isFullscreen {

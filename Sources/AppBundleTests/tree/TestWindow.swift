@@ -2,15 +2,6 @@
 import AppKit
 import Common
 
-class TestTilingContainer: TilingContainer {
-    @MainActor
-    init(orientation: Orientation) {
-        // Create a dummy workspace as parent
-        let workspace = Workspace.get(byName: "test")
-        super.init(parent: workspace, adaptiveWeight: 1.0, orientation, .tiles, index: 0)
-    }
-}
-
 final class TestWindow: Window, CustomStringConvertible {
     private var _rect: Rect?
     var shouldFailGetAxRect: Bool = false
@@ -56,7 +47,11 @@ final class TestWindow: Window, CustomStringConvertible {
         unbindFromParent()
     }
 
-    override var title: String { description }
+    override var title: String {
+        get async { // redundant async. todo create bug report to Swift
+            description
+        }
+    }
 
     @MainActor override func getAxRect() async throws -> Rect? { // todo change to not Optional
         if shouldFailGetAxRect {

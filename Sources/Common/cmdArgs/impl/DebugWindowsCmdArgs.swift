@@ -1,16 +1,13 @@
 public struct DebugWindowsCmdArgs: CmdArgs {
-    public let rawArgs: EquatableNoop<[String]>
-    public init(rawArgs: EquatableNoop<[String]>) { self.rawArgs = rawArgs }
-    public static let parser: CmdParser<Self> = cmdParser(
+    /*conforms*/ public var commonState: CmdArgsCommonState
+    public init(rawArgs: StrArrSlice) { self.commonState = .init(rawArgs) }
+    public static let parser: CmdParser<Self> = .init(
         kind: .debugWindows,
         allowInConfig: false,
         help: debug_windows_help_generated,
-        options: [
-            "--window-id": ArgParser(\.windowId, upcastArgParserFun(parseArgWithUInt32)),
+        flags: [
+            "--window-id": ArgParser(\.windowId, upcastArgParserFun(parseUInt32SubArg)),
         ],
-        arguments: [],
+        posArgs: [],
     )
-
-    /*conforms*/ public var windowId: UInt32?
-    /*conforms*/ public var workspaceName: WorkspaceName?
 }

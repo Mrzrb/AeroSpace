@@ -86,8 +86,8 @@ extension Array { // todo move to ArrayEx.swift
 }
 
 extension String {
-    public func interpolate(with variables: [String: String], interpolationChar: Character = "$") -> Result<String, [String]> {
-        interpolationTokens()
+    public func interpolate(with variables: [String: String]) -> Result<String, [String]> {
+        interpolationTokens(interpolationChar: "$")
             .mapError { [$0] }
             .flatMap { tokens in
                 tokens.mapAllOrFailures { token in
@@ -103,27 +103,27 @@ extension String {
             .map { $0.joined(separator: "") }
     }
 
-    public func interpolationTokens(interpolationChar: Character = "$") -> Result<[StringInterToken], String> {
+    public func interpolationTokens(interpolationChar: Character) -> Result<[StringInterToken], String> {
         var mode: InterpolationParserState = .stringLiteral
         var result: [StringInterToken] = []
         var literal: String = ""
         for char: Character? in (Array(self) + [nil]) {
             switch (mode, char) { // State machine
                 case (.stringLiteral, interpolationChar):
-                    mode = .dollarEncountered
+                    mode = .interpolationCharEncountered
                 case (.stringLiteral, _):
                     if let char {
                         literal.append(char)
                     } else {
                         result.append(.literal(literal))
                     }
-                case (.dollarEncountered, "{"):
+                case (.interpolationCharEncountered, "{"):
                     mode = .interpolatedValue("")
                     result.append(.literal(literal))
                     literal = ""
-                case (.dollarEncountered, interpolationChar):
+                case (.interpolationCharEncountered, interpolationChar):
                     literal.append(interpolationChar)
-                case (.dollarEncountered, _):
+                case (.interpolationCharEncountered, _):
                     literal.append(interpolationChar)
                     if let char {
                         literal.append(char)
@@ -156,6 +156,6 @@ public enum StringInterToken: Equatable, Sendable {
 }
 
 private enum InterpolationParserState {
-    case stringLiteral, dollarEncountered
+    case stringLiteral, interpolationCharEncountered
     case interpolatedValue(String)
 }

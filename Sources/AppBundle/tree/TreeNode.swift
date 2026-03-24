@@ -21,7 +21,7 @@ private func appendToLog(_ message: String) {
     }
 }
 
-class TreeNode: Equatable, AeroAny {
+open class TreeNode: Equatable, AeroAny {
     private var _children: [TreeNode] = []
     var children: [TreeNode] { _children }
     fileprivate final weak var _parent: NonLeafTreeNodeObject? = nil
@@ -143,17 +143,14 @@ class TreeNode: Equatable, AeroAny {
         _parent.markAsMostRecentChild()
     }
 
-    var mostRecentChild: TreeNode? {
-        var iterator = _mruChildren.makeIterator()
-        return iterator.next() ?? children.last
-    }
+    var mostRecentChild: TreeNode? { _mruChildren.mostRecent ?? children.last }
 
     @discardableResult
     func unbindFromParent() -> BindingData {
         unbindIfBound() ?? dieT("\(self) is already unbound. The stacktrace where it was unbound:\n\(unboundStacktrace ?? "nil")")
     }
 
-    nonisolated static func == (lhs: TreeNode, rhs: TreeNode) -> Bool {
+    nonisolated public static func == (lhs: TreeNode, rhs: TreeNode) -> Bool {
         lhs === rhs
     }
 
@@ -166,6 +163,7 @@ class TreeNode: Equatable, AeroAny {
     func cleanUserData<T>(key: TreeNodeUserDataKey<T>) -> T? { userData.removeValue(forKey: key.key) as! T? }
 }
 
+// periphery:ignore - Generic T is used
 struct TreeNodeUserDataKey<T> {
     let key: String
 }
@@ -184,7 +182,7 @@ struct BindingData {
     let index: Int
 }
 
-class NilTreeNode: TreeNode, NonLeafTreeNodeObject {
+final class NilTreeNode: TreeNode, NonLeafTreeNodeObject {
     override private init() {
         super.init()
     }

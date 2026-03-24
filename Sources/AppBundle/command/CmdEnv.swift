@@ -1,21 +1,10 @@
 import Common
 
-struct CmdEnv: ConvenienceCopyable { // todo forward env from cli to server
+struct CmdEnv: ConvenienceCopyable {
     var windowId: UInt32?
     var workspaceName: String?
-    var pwd: String?
 
-    static var defaultEnv: CmdEnv { CmdEnv(windowId: nil, workspaceName: nil, pwd: nil) }
-    init(
-        windowId: UInt32?,
-        workspaceName: String?,
-        pwd: String?
-    ) {
-        self.windowId = windowId
-        self.workspaceName = workspaceName
-        self.pwd = pwd
-    }
-
+    static let defaultEnv: CmdEnv = .init()
     func withFocus(_ focus: LiveFocus) -> CmdEnv {
         switch focus.asLeaf {
             case .window(let wd): .defaultEnv.copy(\.windowId, wd.windowId)
@@ -23,12 +12,8 @@ struct CmdEnv: ConvenienceCopyable { // todo forward env from cli to server
         }
     }
 
-    @MainActor
     var asMap: [String: String] {
-        var result = config.execConfig.envVariables
-        if let pwd {
-            result["PWD"] = pwd
-        }
+        var result = [String: String]()
         if let windowId {
             result[AEROSPACE_WINDOW_ID] = windowId.description
         }

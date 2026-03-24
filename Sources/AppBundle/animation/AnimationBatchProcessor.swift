@@ -274,7 +274,7 @@ class AnimationBatchProcessor {
 
         // Execute and wait
         commandBuffer.commit()
-        commandBuffer.waitUntilCompleted()
+        await commandBuffer.completed()
 
         if let error = commandBuffer.error {
             throw BatchProcessingError.gpuExecutionFailed(error)

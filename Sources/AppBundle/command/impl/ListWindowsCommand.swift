@@ -3,7 +3,7 @@ import Common
 
 struct ListWindowsCommand: Command {
     let args: ListWindowsCmdArgs
-    /*conforms*/ var shouldResetClosedWindowsCache = false
+    /*conforms*/ let shouldResetClosedWindowsCache = false
 
     func run(_ env: CmdEnv, _ io: CmdIo) async throws -> Bool {
         let focus = focus
@@ -37,7 +37,7 @@ struct ListWindowsCommand: Command {
                 windows = windows.filter { $0.app.pid == pid }
             }
             if let appId = args.filteringOptions.appIdFilter {
-                windows = windows.filter { $0.app.bundleId == appId }
+                windows = windows.filter { $0.app.rawAppBundleId == appId }
             }
         }
 

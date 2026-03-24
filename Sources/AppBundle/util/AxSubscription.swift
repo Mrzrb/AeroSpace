@@ -2,7 +2,7 @@ import AppKit
 import Common
 
 /// The subscription is active as long as you keep this class in memory
-class AxSubscription {
+final class AxSubscription {
     let obs: AXObserver
     let ax: AXUIElement
     let axThreadToken: AxAppThreadToken = axTaskLocalAppThreadToken ?? dieT("axTaskLocalAppThreadToken is not initialized")
@@ -14,7 +14,7 @@ class AxSubscription {
         self.ax = ax
     }
 
-    private func subscribe(_ key: String, _ job: RunLoopJob) throws -> Bool {
+    private func subscribe(_ key: String) throws -> Bool {
         axThreadToken.checkEquals(axTaskLocalAppThreadToken)
         if AXObserverAddNotification(obs, ax, key as CFString, nil) == .success {
             notifKeys.insert(key)
@@ -34,7 +34,7 @@ class AxSubscription {
             for key: String in notifKeys {
                 try job.checkCancellation()
                 assert(visitedNotifKeys.insert(key).inserted)
-                if try !subscription.subscribe(key, job) { return [] }
+                if try !subscription.subscribe(key) { return [] }
             }
             CFRunLoopAddSource(CFRunLoopGetCurrent(), AXObserverGetRunLoopSource(obs), .defaultMode)
             result.append(subscription)

@@ -5,7 +5,7 @@ import Common
 private var activeRefreshTask: Task<(), any Error>? = nil
 
 @MainActor
-func runRefreshSession(
+func scheduleRefreshSession(
     _ event: RefreshSessionEvent,
     optimisticallyPreLayoutWorkspaces: Bool = false,
 ) {
@@ -38,6 +38,7 @@ func runRefreshSessionBlocking(
             gcMonitors()
 
             updateTrayText()
+            SecureInputPanel.shared.refresh()
             try await normalizeLayoutReason()
             if shouldLayoutWorkspaces { try await layoutWorkspaces() }
         }
@@ -45,10 +46,10 @@ func runRefreshSessionBlocking(
 }
 
 @MainActor
-func runSession<T>(
+func runLightSession<T>(
     _ event: RefreshSessionEvent,
-    _ token: RunSessionGuard,
-    body: @MainActor () async throws -> T
+    _: RunSessionGuard,
+    body: @MainActor () async throws -> T,
 ) async throws -> T {
     let state = signposter.beginInterval(#function, "event: \(event) axTaskLocalAppThreadToken: \(axTaskLocalAppThreadToken?.idForDebug)")
     defer { signposter.endInterval(#function, state) }
@@ -68,11 +69,12 @@ func runSession<T>(
             let focusAfter = focus.windowOrNil
 
             updateTrayText()
+            SecureInputPanel.shared.refresh()
             try await layoutWorkspaces()
             if focusBefore != focusAfter {
                 focusAfter?.nativeFocus() // syncFocusToMacOs
             }
-            runRefreshSession(event)
+            scheduleRefreshSession(event)
             return result
         }
     }
@@ -86,7 +88,14 @@ struct RunSessionGuard: Sendable {
         command is EnableCommand ? .forceRun : .isServerEnabled
     }
     @MainActor
-    static var checkServerIsEnabledOrDie: RunSessionGuard { .isServerEnabled ?? dieT("server is disabled") }
+    static func checkServerIsEnabledOrDie(
+        file: StaticString = #fileID,
+        line: Int = #line,
+        column: Int = #column,
+        function: String = #function,
+    ) -> RunSessionGuard {
+        .isServerEnabled ?? dieT("server is disabled", file: file, line: line, column: column, function: function)
+    }
     static let forceRun = RunSessionGuard()
     private init() {}
 }
@@ -102,7 +111,7 @@ func refreshModel() {
 private func refresh() async throws {
     // Garbage collect terminated apps and windows before working with all windows
     let mapping = try await MacApp.refreshAllAndGetAliveWindowIds(frontmostAppBundleId: NSWorkspace.shared.frontmostApplication?.bundleIdentifier)
-    let aliveWindowIds = mapping.values.flatMap { $0 }
+    let aliveWindowIds = mapping.values.flatMap { $0 }.toSet()
 
     for window in MacWindow.allWindows {
         if !aliveWindowIds.contains(window.windowId) {
@@ -119,11 +128,11 @@ private func refresh() async throws {
     Workspace.garbageCollectUnusedWorkspaces()
 }
 
-func refreshObs(_ obs: AXObserver, ax: AXUIElement, notif: CFString, data: UnsafeMutableRawPointer?) {
+func refreshObs(_: AXObserver, _: AXUIElement, notif: CFString, _: UnsafeMutableRawPointer?) {
     let notif = notif as String
     Task { @MainActor in
         if !TrayMenuModel.shared.isEnabled { return }
-        runRefreshSession(.ax(notif))
+        scheduleRefreshSession(.ax(notif))
     }
 }
 
@@ -158,9 +167,12 @@ private func layoutWorkspaces() async throws {
         let blc2 = monitor.rect.bottomLeftCorner + CGPoint(x: xOff, y: 2)
         let blc3 = monitor.rect.bottomLeftCorner + CGPoint(x: -2, y: 2)
 
+        func contains(_ monitor: Monitor, _ point: CGPoint) -> Int { monitor.rect.contains(point) ? 1 : 0 }
+        let important = 10
+
         let corner: OptimalHideCorner =
-            monitors.contains(where: { m in m.rect.contains(brc1) || m.rect.contains(brc2) || m.rect.contains(brc3) }) &&
-            monitors.allSatisfy { m in !m.rect.contains(blc1) && !m.rect.contains(blc2) && !m.rect.contains(blc3) }
+            monitors.sumOfInt { contains($0, blc1) + contains($0, blc2) + important * contains($0, blc3) } <
+            monitors.sumOfInt { contains($0, brc1) + contains($0, brc2) + important * contains($0, brc3) }
             ? .bottomLeftCorner
             : .bottomRightCorner
         monitorToOptimalHideCorner[monitor.rect.topLeftCorner] = corner

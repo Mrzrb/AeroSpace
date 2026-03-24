@@ -1,3 +1,4 @@
+// periphery:ignore:all - Those are utils that can become useful any moment
 @testable import AppBundle
 import Common
 import XCTest
@@ -7,6 +8,7 @@ func assertTrue(_ actual: Bool, file: String = #filePath, line: Int = #line) {
 }
 
 // Because assertEquals default messages are unreadable!
+// periphery:ignore
 func assertNotEquals<T>(_ actual: T, _ expected: T, file: String = #filePath, line: Int = #line) where T: Equatable {
     if actual == expected {
         failExpectedActual("not \(expected)", actual, file: file, line: line)
@@ -67,16 +69,16 @@ func testParseCommandSucc(_ command: String, _ expected: any CmdArgs) {
     }
 }
 
-private func failExpectedActual(_ expected: Any, _ actual: Any, additionalMsg: String? = nil, file: String = #filePath, line: Int = #line) {
+func failExpectedActual(_ expected: Any?, _ actual: Any?, additionalMsg: String? = nil, file: String = #filePath, line: Int = #line) {
     let additionalMsg = additionalMsg.map { "\n    Additional Message:\n        \($0)" } ?? ""
     XCTFail(
         """
 
         \(file):\(line): Assertion failed\(additionalMsg)
             Expected:
-                \(expected)
+                \(expected.prettyDescription)
             Actual:
-                \(actual)
+                \(actual.prettyDescription)
         """,
     )
 }

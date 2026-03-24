@@ -41,6 +41,15 @@ final class FocusCommandTest: XCTestCase {
             parseCommand("focus --boundaries all-monitors-outer-frame dfs-next").errorOrNil,
             "(dfs-next|dfs-prev) only supports --boundaries workspace",
         )
+
+        assertEquals(
+            parseCommand("focus --window-id 42 --wrap-around").errorOrNil,
+            "--window-id is incompatible with other options",
+        )
+        assertEquals(
+            parseCommand("focus left --boundaries-action wrap-around-the-workspace --wrap-around").errorOrNil,
+            "ERROR: Conflicting options: --boundaries-action, --wrap-around",
+        )
     }
 
     func testFocus() {
@@ -51,6 +60,19 @@ final class FocusCommandTest: XCTestCase {
             TestWindow.new(id: 3, parent: $0)
         }
         assertEquals(focus.windowOrNil?.windowId, 2)
+    }
+
+    func testFocusOverFloatingWindows() async throws {
+        assertEquals(focus.windowOrNil, nil)
+        Workspace.get(byName: name).apply {
+            TestWindow.new(id: 1, parent: $0, rect: Rect(topLeftX: 0, topLeftY: 0, width: 100, height: 100))
+            assertEquals(TestWindow.new(id: 2, parent: $0, rect: Rect(topLeftX: 10, topLeftY: 10, width: 100, height: 100)).focusWindow(), true)
+            TestWindow.new(id: 3, parent: $0, rect: Rect(topLeftX: 20, topLeftY: 20, width: 100, height: 100))
+        }
+
+        assertEquals(focus.windowOrNil?.windowId, 2)
+        try await FocusCommand.new(direction: .right).run(.defaultEnv, .emptyStdin)
+        assertEquals(focus.windowOrNil?.windowId, 3)
     }
 
     func testFocusAlongTheContainerOrientation() async throws {

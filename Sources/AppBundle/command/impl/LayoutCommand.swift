@@ -3,7 +3,7 @@ import Common
 
 struct LayoutCommand: Command {
     let args: LayoutCmdArgs
-    /*conforms*/ var shouldResetClosedWindowsCache = true
+    /*conforms*/ let shouldResetClosedWindowsCache = true
 
     func run(_ env: CmdEnv, _ io: CmdIo) async throws -> Bool {
         guard let target = args.resolveTargetOrReportError(env, io) else { return false }
@@ -53,7 +53,7 @@ struct LayoutCommand: Command {
             case .floating:
                 let workspace = target.workspace
                 window.bindAsFloatingWindow(to: workspace)
-                if let size = window.lastFloatingSize { window.setSizeAsync(size) }
+                if let size = window.lastFloatingSize { window.setAxFrame(nil, size) }
                 return true
         }
     }
